@@ -238,6 +238,16 @@ details[open] summary::after{content:"–"}
 .coachbar textarea{flex:1;resize:none;background:var(--surface2);border:1px solid transparent;border-radius:12px;padding:10px 12px;min-height:44px;max-height:120px;color:var(--ink)}
 .coachbar textarea:focus{border-color:var(--accent);outline:none;background:var(--surface)}
 input[type=password]{background:var(--surface2);border:1px solid transparent;border-radius:10px;padding:9px 11px;width:100%;color:var(--ink)}
+.setrow{display:grid;grid-template-columns:1fr 50px 50px 58px 28px;gap:6px;align-items:center}
+.setrow input{padding:7px 8px;font-size:14px;border-radius:8px}
+.setrow .del{width:28px;height:32px;border-radius:8px;color:var(--ink2);display:grid;place-items:center;font-size:16px}
+.setrow .del:hover{background:var(--surface2);color:var(--bad)}
+.sethead{display:grid;grid-template-columns:1fr 50px 50px 58px 28px;gap:6px;font-size:10.5px;color:var(--ink2);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.lifts{display:flex;flex-direction:column}
+.lift{display:grid;grid-template-columns:1fr auto;gap:8px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.lift:first-child{border-top:0}
+.lift .k{font-weight:500}.lift .sub{font-size:12px;color:var(--ink2)}
+.lift .v{font-variant-numeric:tabular-nums;text-align:right;font-weight:600}
 hr.sep{border:0;border-top:1px solid var(--line);margin:2px 0}
 @media (max-width:380px){.hero .big{font-size:54px}.stats{grid-template-columns:repeat(2,1fr)}}
 </style>
@@ -509,7 +519,7 @@ function renderToday(){
   const exMin=D.ex.reduce((a,e)=>a+e.min,0);
   html+=`<div class="card meal"><div class="mh"><h3>Exercise &amp; sauna</h3><span class="kc tnum">${D.ex.length?exMin+' min · −'+fmt(T.ex)+' kcal':''}</span></div><div class="items">`;
   if(!D.ex.length)html+=`<div class="item empty">Nothing yet. Football sessions get added back at ${S.profile.eatBack}%.</div>`;
-  for(const e of D.ex)html+=`<div class="item" style="--sc:${e.id==='sauna'?'var(--ink2)':'var(--accent)'}"><span class="dot"></span><div><div class="nm">${esc(e.name)}</div><div class="sub">${e.min} min${e.id==='sauna'?' · recovery, no calories counted':''}</div></div><span class="kc">${e.id==='sauna'?'–':fmt(e.kcal)}</span><button class="del" data-delex="${e.uid}" aria-label="Remove">×</button></div>`;
+  for(const e of D.ex)html+=`<div class="item" style="--sc:${e.id==='sauna'?'var(--ink2)':'var(--accent)'}"><span class="dot"></span><div><div class="nm">${esc(e.name)}</div><div class="sub">${e.min} min${e.id==='sauna'?' · recovery, no calories counted':''}${(e.sets||[]).length?' · '+e.sets.map(x=>`${x.n} ${x.sets||'?'}×${x.reps||'?'}${x.kg?' @ '+x.kg+' kg':''}`).join(' · '):''}</div></div><span class="kc">${e.id==='sauna'?'–':fmt(e.kcal)}</span><button class="del" data-delex="${e.uid}" aria-label="Remove">×</button></div>`;
   html+=`</div><div class="addrow"><button class="btn sm" id="addex">+ Log exercise</button><button class="btn sm ghost" id="copyy" title="Copy yesterday's food">Copy yesterday</button></div></div>`;
   const prevDate=addDays(cur,-1);
   html+=`<div class="card"><div class="row between"><div><div class="eyebrow">Google Calendar</div><div class="small muted" style="margin-top:2px">${D.foods.length?'Save this day\'s food, training and weight as an all-day note.':'Log something first, then save the day to your calendar.'}</div></div>${D.foods.length?`<a class="btn sm" target="_blank" rel="noopener" href="${gcalFoodUrl(cur)}">Save day</a>`:''}</div></div>`;
@@ -807,20 +817,36 @@ function stopScan(){
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopScan()});
 
 /* ---------- EXERCISE ---------- */
+function lastSet(name){const n=name.trim().toLowerCase();if(!n)return null;const ds=Object.keys(S.days).sort().reverse();for(const d of ds){for(const e of S.days[d].ex||[]){for(const st of e.sets||[]){if(st.n.trim().toLowerCase()===n)return{date:d,...st}}}}return null}
+function bestKg(name){const n=name.trim().toLowerCase();let best=null;for(const d in S.days)for(const e of S.days[d].ex||[])for(const st of e.sets||[])if(st.n.trim().toLowerCase()===n&&st.kg>0&&(!best||st.kg>best.kg))best={date:d,...st};return best}
 function openExercise(){
   if(!S.profile){toast('Set up your plan first');return}
   let sel=EX[0];const w=latestWeight();
   openSheet(`<h2>Log exercise · ${niceDate(cur)}</h2>
     <div class="exgrid" id="exgrid">${EX.map(e=>`<button data-ex="${e.id}" class="${e===sel?'on':''}"><b>${e.name}</b><span>${e.hint}</span></button>`).join('')}</div>
+    <label class="f">Name (edit freely: padel, boxing, 5-a-side, leg day…)<input type="text" id="exname" value="${sel.name}"></label>
     <div class="grid2"><label class="f">Minutes<input type="number" id="exmin" inputmode="numeric" value="${S.profile.fbMinutes}"></label><label class="f">kcal used (editable)<input type="number" id="exkcal" inputmode="numeric"></label></div>
     <label class="f">Wristband / watch says (kcal, optional)<input type="number" id="exband" inputmode="numeric" placeholder="e.g. 420"></label>
     <p class="xs muted" style="margin:0" id="exnote"></p>
+    <div class="eyebrow">Individual exercises in this session (optional)</div>
+    <div class="sethead"><span>Exercise</span><span>Sets</span><span>Reps</span><span>kg</span><span></span></div>
+    <div id="setlist" style="display:flex;flex-direction:column;gap:6px"></div>
+    <div class="row between"><button class="btn sm" id="setadd">+ Add exercise</button><span class="xs muted" id="sethint"></span></div>
     <div class="row"><button class="btn primary wide" id="exadd">Add</button><button class="btn ghost" id="excancel">Cancel</button></div>`);
+  const setlist=$('#setlist');
+  const addRow=(v={})=>{const row=document.createElement('div');row.className='setrow';row.innerHTML=`<input type="text" class="sn" placeholder="e.g. Bench press" value="${esc(v.n||'')}" list="exnames"><input type="number" class="ss" inputmode="numeric" placeholder="3" value="${v.sets??''}"><input type="number" class="sr" inputmode="numeric" placeholder="10" value="${v.reps??''}"><input type="number" class="sk" inputmode="decimal" step="0.5" placeholder="kg" value="${v.kg??''}"><button class="del" aria-label="Remove">×</button>`;
+    row.querySelector('.del').onclick=()=>{row.remove()};
+    row.querySelector('.sn').oninput=()=>{const l=lastSet(row.querySelector('.sn').value);$('#sethint').textContent=l?`Last ${l.n}: ${l.sets}×${l.reps}${l.kg?' @ '+l.kg+' kg':''} on ${niceDate(l.date)}`:''};
+    row.querySelector('.sn').onfocus=row.querySelector('.sn').oninput;
+    setlist.appendChild(row);};
+  $('#setadd').onclick=()=>{addRow();setlist.lastChild.querySelector('.sn').focus()};
+  if(!$('#exnames')){const dl=document.createElement('datalist');dl.id='exnames';document.body.appendChild(dl)}
+  const names=new Set();for(const d in S.days)for(const e of S.days[d].ex||[])for(const st of e.sets||[])names.add(st.n);$('#exnames').innerHTML=[...names].sort().map(n=>`<option value="${esc(n)}">`).join('');
   const calc=()=>{const m=parseFloat($('#exmin').value)||0;const band=parseFloat($('#exband').value);$('#exband').disabled=sel.id==='sauna';if(sel.id==='sauna'){$('#exkcal').value=0;$('#exnote').textContent=`Sauna time is tracked in Progress. No calories are added to your food target: the weight you lose in there is water.`}else if(band>0){$('#exkcal').value=r0(band*0.75);$('#exnote').textContent=`Wristband reading ${r0(band)} kcal, counted at 75% = ${r0(band*0.75)} kcal. Wrist trackers overstate gym and football calories by 20–40%, so this is the safer number. ${S.profile.eatBack}% of it is added to today's food target.`}else{$('#exkcal').value=r0(sel.met*w*m/60);$('#exnote').textContent=`${sel.name}: MET ${sel.met} × ${w} kg × ${m} min ≈ ${r0(sel.met*w*m/60)} kcal. ${S.profile.eatBack}% of this is added to today's food target.`}};
-  $$('#exgrid button').forEach(b=>b.onclick=()=>{sel=EX.find(e=>e.id===b.dataset.ex);$$('#exgrid button').forEach(x=>x.classList.toggle('on',x===b));$('#exmin').value=sel.id==='sauna'?20:sel.id==='gym'||sel.id==='hiit'?(S.profile.gymMinutes||45):sel.id.startsWith('fb')?S.profile.fbMinutes:30;calc()});
+  $$('#exgrid button').forEach(b=>b.onclick=()=>{sel=EX.find(e=>e.id===b.dataset.ex);$('#exname').value=sel.name;$$('#exgrid button').forEach(x=>x.classList.toggle('on',x===b));if((sel.id==='gym'||sel.id==='hiit')&&!setlist.children.length)addRow();$('#exmin').value=sel.id==='sauna'?20:sel.id==='gym'||sel.id==='hiit'?(S.profile.gymMinutes||45):sel.id.startsWith('fb')?S.profile.fbMinutes:30;calc()});
   $('#exmin').oninput=calc;$('#exband').oninput=calc;calc();
   $('#excancel').onclick=closeSheet;
-  $('#exadd').onclick=()=>{const m=parseFloat($('#exmin').value),k=parseFloat($('#exkcal').value);if(!(m>0)||!(k>=0)){toast('Enter minutes');return}day(cur).ex.push({uid:uid(),id:sel.id,name:sel.name,min:m,kcal:r0(k)});save();closeSheet();toast(`Logged ${sel.name}`);if(view!=='today')go('today');else renderToday()};
+  $('#exadd').onclick=()=>{const m=parseFloat($('#exmin').value),k=parseFloat($('#exkcal').value);if(!(m>0)||!(k>=0)){toast('Enter minutes');return}const nm=$('#exname').value.trim()||sel.name;const sets=[...setlist.querySelectorAll('.setrow')].map(r=>({n:r.querySelector('.sn').value.trim(),sets:parseFloat(r.querySelector('.ss').value)||0,reps:parseFloat(r.querySelector('.sr').value)||0,kg:parseFloat(r.querySelector('.sk').value)||0})).filter(x=>x.n);day(cur).ex.push({uid:uid(),id:sel.id,name:nm,min:m,kcal:r0(k),sets});save();closeSheet();toast(`Logged ${nm}`);if(view!=='today')go('today');else renderToday()};
 }
 
 /* ---------- PROGRESS ---------- */
@@ -874,6 +900,7 @@ function renderProgress(){
     <div class="row between"><h2 style="font-size:22px">Training time</h2><span class="small muted">this week, Mon–Sun</span></div>
     <div class="stats" style="margin-top:10px">${tile('Football','fb')}${tile('Gym','gym')}${tile('Other','other')}${tile('Sauna','sauna')}</div>
     <div class="bar" style="margin-top:12px"><i style="width:${clamp(trainTotal/Math.max(1,planMin)*100,0,100)}%"></i></div>
+    ${(()=>{const seen=new Map();const ds=Object.keys(S.days).sort().reverse();for(const d of ds)for(const e of S.days[d].ex||[])for(const st of e.sets||[]){const k=st.n.trim().toLowerCase();if(k&&!seen.has(k))seen.set(k,{date:d,...st})}if(!seen.size)return '';const rows=[...seen.values()].slice(0,12).map(l=>{const b=bestKg(l.n);return `<div class="lift"><div><div class="k">${esc(l.n)}</div><div class="sub">last ${niceDate(l.date)}${b&&b.kg>l.kg?` · best ${b.kg} kg`:''}</div></div><div class="v">${l.sets||'?'}×${l.reps||'?'}${l.kg?`<br><span class="xs muted">${l.kg} kg</span>`:''}</div></div>`}).join('');return `<hr class="sep" style="margin:12px 0"><div class="eyebrow" style="margin-bottom:4px">Exercises · most recent</div><div class="lifts">${rows}</div>`})()}
     <p class="small muted" style="margin:8px 0 0"><b class="tnum">${trainTotal} min</b> of training so far this week vs the <b class="tnum">${planMin} min</b> your plan assumes (football ${P.fbPerWeek}×${P.fbMinutes}, gym ${P.gymPerWeek||0}×${P.gymMinutes||0}). Sauna is tracked separately and never counts as calories.</p>
   </div>
   <div class="card lift">
