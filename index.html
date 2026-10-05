@@ -764,7 +764,7 @@ function renderToday(){
       html+=`<div class="item" style="--sc:${sm.color}"><span class="dot" title="${sm.label}"></span><div class="main" data-edit="${f.uid}" role="button" tabindex="0"><div class="nm">${esc(f.name)}</div><div class="sub"><i>${f.grams} g</i><i style="color:var(--p)">P ${r0(f.per100.p*g)}</i><i style="color:var(--fib)">Fib ${r0((f.per100.fib||0)*g)}</i><i style="color:var(--c)">C ${r0(f.per100.c*g)}</i><i style="color:var(--f)">F ${r0(f.per100.f*g)}</i></div></div><span class="kc">${fmt(f.per100.kcal*g)}</span><button class="del" data-del="${f.uid}" aria-label="Remove">×</button></div>`}
     html+=`</div>`;
   }
-  html+=`<div class="addrow"><button class="btn sm" id="copyy">Copy yesterday's food</button><button class="btn sm ghost" id="act-say2">${MIC} Say a meal</button></div></div>`;
+  html+=`<div class="addrow"><button class="btn sm" id="copyy">Copy yesterday's food</button><button class="btn sm ghost" id="act-say2">${MIC} Say a meal</button><button class="btn sm ghost" id="act-photo">${CAM} Photo</button></div></div>`;
   const exMin=D.ex.reduce((a,e)=>a+e.min,0);
   html+=`<div class="card meal"><div class="mh"><h3>Training &amp; sauna</h3><span class="kc">${D.ex.length?exMin+' min · −'+fmt(T.ex)+' kcal':''}</span></div><div class="items">`;
   if(!D.ex.length)html+=`<div class="item empty">Nothing yet. Sessions add ${S.profile.eatBack}% of their calories back to today's target.</div>`;
@@ -802,7 +802,7 @@ function renderToday(){
   el.querySelectorAll('[data-addmeal]').forEach(b=>b.onclick=()=>{pendingMeal=b.dataset.addmeal;go('add')});
   el.querySelectorAll('[data-saymeal]').forEach(b=>b.onclick=()=>openSpeak(b.dataset.saymeal));
   const qs=quests(cur);el.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{const q=qs[+b.dataset.q];if(!q.done)q.act();else toast('Done: '+q.n)});
-  $('#addex').onclick=()=>openExercise();$('#act-ex').onclick=()=>openExercise();$('#act-weigh').onclick=openWeigh;const say2=$('#act-say2');if(say2)say2.onclick=()=>openSpeak();
+  $('#addex').onclick=()=>openExercise();$('#act-ex').onclick=()=>openExercise();$('#act-weigh').onclick=openWeigh;const say2=$('#act-say2');if(say2)say2.onclick=()=>openSpeak();const ph=$('#act-photo');if(ph)ph.onclick=()=>openSpeak(null,{photo:true});
   const brd=el.querySelector('.board .top3');if(brd){brd.style.cursor='pointer';brd.onclick=()=>go('progress')}
   el.querySelectorAll('.mring').forEach(m=>{const act=()=>{const k=m.dataset.m;if(k==='p'||k==='fib')openPicks(k);else{pane='search';go('add');const q=k==='c'?'volkoren':'kwark';$('#q').value=q;doSearch(q)}};m.onclick=act;m.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();act()}}});
   $('#coachgo').onclick=()=>{const q=$('#coachq').value.trim();$('#coachq').value='';openCoach(q||'What should I eat right now?')};
@@ -1230,6 +1230,16 @@ function bestKg(name){const n=name.trim().toLowerCase();let best=null;for(const 
 
 /* ---------- SPEECH ---------- */
 const MIC='<svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg>';
+const CAM='<svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
+function shrinkImage(file,max){return new Promise((res,rej)=>{const img=new Image();img.onload=()=>{const sc=Math.min(1,max/Math.max(img.width,img.height));const c=document.createElement('canvas');c.width=Math.round(img.width*sc);c.height=Math.round(img.height*sc);c.getContext('2d').drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(img.src);res(c.toDataURL('image/jpeg',0.82))};img.onerror=()=>rej(new Error('could not read the image'));img.src=URL.createObjectURL(file)})}
+async function parsePhoto(dataUrl){
+  const sys=MEAL_SYSTEM+'\nThe user sent a PHOTO of their meal. Identify every food visible, estimate portions (count + unit, and grams) using typical Dutch portion sizes and the plate or hand for scale, and return the JSON. Keep reply to one sentence; say what you were unsure about.';
+  const b64=dataUrl.split(',')[1];
+  const sm=await getSample();
+  if(sm){let lim=null;try{lim=await sm.limits()}catch(e){}if(!(lim&&lim.images))throw new Error('this preview cannot look at images; use the phone app with your API key');return await sm.json([{role:'user',content:sys+'\n\nIVAN SAYS: here is a photo of what I ate.'}],{images:[dataUrl],cache:false})}
+  if(S.settings.apiKey){const txt=await askClaudeAPI(S.settings.apiKey,sys,[{role:'user',content:[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},{type:'text',text:'Here is a photo of what I ate. Return the JSON.'}]}]);return extractJSON(txt)}
+  throw new Error('needs Claude');
+}
 function micSupported(){return !!(window.SpeechRecognition||window.webkitSpeechRecognition)}
 function startMic(btn,onFinal,onInterim){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){toast('Voice input is not available in this browser. Chrome works best.');return null}
@@ -1489,10 +1499,10 @@ function openSpeak(meal,preset){
   meal=meal||guessMeal();const conv=[];let items=[];
   openSheet(`<h2>Say what you ate</h2>
     <div class="seg mealseg" id="spmeal">${MEALS.map(m=>`<button data-meal="${m}" class="${m===meal?'on':''}">${m}</button>`).join('')}</div>
-    <div class="xs muted">${coachMode()==='rules'?'Offline parser: I know common Dutch staples and ask one follow-up. Add your API key on the Plan tab and I understand anything you say.':'Understood by Claude. I may ask one follow-up question, then you confirm the portions.'}</div>
+    <div class="xs muted">${coachMode()==='rules'?'Offline parser: I know common Dutch staples and ask one follow-up. Add your API key on the Journey tab and I understand anything you say, including photos of your plate.':'Understood by Claude: speak, type or snap a photo of your plate. I may ask one follow-up, then you confirm the portions.'}</div>
     <div class="thread" id="spthread"><div class="msg a">What did you eat? Tap the mic and talk, or type. For example: "I had a sandwich" or "300 g skyr with blueberries".</div></div>
     <div id="spitems" hidden style="display:flex;flex-direction:column;gap:6px"></div>
-    <div class="coachbar"><textarea id="spin" rows="1" enterkeyhint="send" placeholder="I had a…"></textarea><button class="btn micbtn ${micSupported()?'':'hidden'}" id="spmic" aria-label="Speak">${MIC}</button><button class="btn primary" id="spsend">Send</button></div>
+    <div class="coachbar"><textarea id="spin" rows="1" enterkeyhint="send" placeholder="I had a…"></textarea><button class="btn micbtn ${micSupported()?'':'hidden'}" id="spmic" aria-label="Speak">${MIC}</button><label class="btn micbtn" id="spphotobtn" title="Photo of your plate" aria-label="Photo of your plate"><input type="file" id="spphoto" accept="image/*" capture="environment" hidden>${CAM}</label><button class="btn primary" id="spsend">Send</button></div>
     <div class="row between">${langChips()}<span class="xs muted" id="spstatus"></span></div>`);
   bindLang($('#panel'));
   const thread=$('#spthread'),box=$('#spitems');
@@ -1530,6 +1540,17 @@ function openSpeak(meal,preset){
   $('#spsend').onclick=()=>{send($('#spin').value);$('#spin').value=''};
   $('#spin').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#spsend').click()}};
   const mic=$('#spmic');if(mic)mic.onclick=()=>startMic(mic,t=>{$('#spin').value='';send(t)},t=>{$('#spin').value=t});
+  $('#spphoto').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
+    if(coachMode()==='rules'){push('assistant','Photo logging runs on Claude. Add your Anthropic API key on the Journey tab (Coach & voice) and I will read your plate from a picture. Until then, say it or type it.');return}
+    let dataUrl;try{dataUrl=await shrinkImage(f,1024)}catch(err){toast('Could not read that photo');return}
+    const d=document.createElement('div');d.className='msg u';d.innerHTML=`<img src="${dataUrl}" alt="meal photo" style="max-width:170px;border-radius:10px;display:block">`;thread.appendChild(d);thread.scrollTop=thread.scrollHeight;
+    $('#spsend').disabled=true;$('#spstatus').textContent='Looking at your plate…';
+    try{const r=await parsePhoto(dataUrl);const got=Array.isArray(r.items)?r.items.filter(x=>x&&x.name&&x.per100).map(norm):[];if(got.length)items=got;
+      conv.push({role:'user',content:'[photo of my meal] '+got.map(i=>`${i.count&&i.unit?i.count+' '+i.unit.label+' ':''}${i.name} ${i.grams} g`).join(', ')});
+      push('assistant',(r.reply||'Here is what I can see.')+(r.question?' '+r.question:'')+' Fix anything with − / +, or tell me.');drawItems();$('#spin').placeholder='Correct anything: “the rice was less”, “no sauce”, “2 eggs”'}
+    catch(err){push('assistant','I could not read the photo ('+(err&&err.message||err)+'). Try again with the whole plate in frame, or just tell me what it was.')}
+    $('#spsend').disabled=false;$('#spstatus').textContent=''};
+  if(preset&&preset.photo)setTimeout(()=>$('#spphoto').click(),300);
   if(preset&&Array.isArray(preset.items)){items=preset.items.filter(x=>x&&x.name&&x.per100).map(norm);push('assistant',(preset.note||'Meal received.')+' Check the amounts, change anything, then add it.');drawItems();$('#spin').placeholder='Correct anything: “beets were much less”, “no mayo”, “chicken 60 g”';conv.length=0;conv.push({role:'user',content:items.map(i=>`${i.grams} g ${i.name}`).join(', ')})}
 }
 function importFromLink(){try{const m=location.hash.match(/#add=(.+)$/);if(!m)return;const data=JSON.parse(decodeURIComponent(m[1]));history.replaceState(null,'',location.pathname+location.search);if(!S.profile){toast('Set up your plan first, then open the link again');return}setTimeout(()=>openSpeak(data.meal||'Lunch',data),400)}catch(e){toast('That meal link could not be read')}}
