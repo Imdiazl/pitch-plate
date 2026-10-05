@@ -26,3 +26,8 @@ head=open(os.path.join(here,'head.html')).read()
 sw_reg="\n<script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))}</script>\n</head>\n<body>"
 open(os.path.join(root,'index.html'),'w').write(head+head_part+sw_reg+body_part+'\n</body>\n</html>\n')
 print('built app.html + index.html', len(t))
+import subprocess,sys
+r=subprocess.run(['node',os.path.join(here,'smoke.js')],capture_output=True,text=True)
+print(r.stdout.strip());
+if r.returncode!=0:
+    print(r.stderr.strip()); print('BUILD BLOCKED: smoke test failed'); sys.exit(1)
