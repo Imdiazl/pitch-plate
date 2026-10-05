@@ -194,6 +194,15 @@ label.f{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--
 .item .del:hover{background:var(--surface2);color:var(--bad)}
 .item.empty{grid-template-columns:1fr;color:var(--ink2);font-size:13px;padding:6px 16px 12px;border-top:0}
 .addrow{display:flex;gap:8px;padding:10px 16px 14px;border-top:1px solid var(--line)}
+.msec{border-top:1px solid var(--line)}
+.msh{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:10px 14px 4px 18px;font-size:14.5px}
+.msh b{font-weight:600}
+.msact{display:flex;gap:6px}
+.ib{width:38px;height:38px;border-radius:10px;background:var(--surface2);border:1px solid var(--line);display:grid;place-items:center;font-size:20px;font-weight:600;color:var(--ink)}
+.ib svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.diary .item{padding-left:18px}
+.actions.three{grid-template-columns:repeat(3,1fr)}
+.actions.three .btn{flex-direction:column;gap:6px;font-size:12.5px;padding:10px 6px;text-align:center}
 /* tabs */
 .tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;pointer-events:none;z-index:20}
 .tabbar .inner{pointer-events:auto;width:100%;max-width:540px;display:grid;grid-template-columns:1fr 1fr 1.25fr 1fr 1fr;background:var(--surface);background:color-mix(in srgb,var(--surface) 94%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);padding:8px 8px calc(10px + env(safe-area-inset-bottom));gap:4px}
@@ -661,8 +670,23 @@ function renderToday(){
     <div class="gauge">${gaugeSvg(pct,over)}<div class="gc"><span class="num ${over?'over':''}">${fmt(Math.abs(left))}</span><span class="l">${over?'kcal over':'kcal left'}</span></div></div>
     <div class="gstats"><div class="gstat"><div class="v">${fmt(t.kcal)}</div><div class="k">eaten</div></div><div class="gstat"><div class="v">${fmt(T.kcal)}</div><div class="k">target</div></div><div class="gstat"><div class="v" style="color:${T.ex?'var(--accent)':'var(--ink2)'}">${T.ex?'+'+fmt(T.ex*S.profile.eatBack/100):'0'}</div><div class="k">from training</div></div></div>
     <div class="rings">${mring('p','Protein','var(--p)',t.p,T.p,parts[1])}${mring('fib','Fibre','var(--fib)',t.fib,T.fib,parts[2])}${mring('c','Carbs','var(--c)',t.c,T.c)}${mring('f','Fat','var(--f)',t.f,T.f)}</div>
-  </div>
-  <div class="card lift board">
+  </div>`;
+  html+=`<div class="card meal diary"><div class="mh"><h3>Eaten today</h3><span class="kc">${D.foods.length?fmt(t.kcal)+' kcal · P '+r0(t.p)+' g · fibre '+r0(t.fib)+' g':'nothing logged yet'}</span></div>`;
+  for(const m of MEALS){
+    const items=D.foods.filter(f=>f.meal===m);const kc=items.reduce((a,f)=>a+f.per100.kcal*f.grams/100,0);
+    html+=`<div class="msec"><div class="msh"><b>${m}</b><span class="tnum muted small">${items.length?fmt(kc)+' kcal':''}</span><span class="msact"><button class="ib" data-saymeal="${m}" aria-label="Say what you ate for ${m.toLowerCase()}">${MIC}</button><button class="ib" data-addmeal="${m}" aria-label="Add to ${m.toLowerCase()}">+</button></span></div>`;
+    if(!items.length)html+=`<div class="item empty">Nothing yet.</div>`;
+    for(const f of items){const sc=fitScore(f.per100),sm=scoreMeta(sc);const g=f.grams/100;
+      html+=`<div class="item" style="--sc:${sm.color}"><span class="dot" title="${sm.label}"></span><div class="main" data-edit="${f.uid}" role="button" tabindex="0"><div class="nm">${esc(f.name)}</div><div class="sub"><i>${f.grams} g</i><i style="color:var(--p)">P ${r0(f.per100.p*g)}</i><i style="color:var(--fib)">Fib ${r0((f.per100.fib||0)*g)}</i><i style="color:var(--c)">C ${r0(f.per100.c*g)}</i><i style="color:var(--f)">F ${r0(f.per100.f*g)}</i></div></div><span class="kc">${fmt(f.per100.kcal*g)}</span><button class="del" data-del="${f.uid}" aria-label="Remove">×</button></div>`}
+    html+=`</div>`;
+  }
+  html+=`<div class="addrow"><button class="btn sm" id="copyy">Copy yesterday's food</button><button class="btn sm ghost" id="act-say2">${MIC} Say a meal</button></div></div>`;
+  const exMin=D.ex.reduce((a,e)=>a+e.min,0);
+  html+=`<div class="card meal"><div class="mh"><h3>Training &amp; sauna</h3><span class="kc">${D.ex.length?exMin+' min · −'+fmt(T.ex)+' kcal':''}</span></div><div class="items">`;
+  if(!D.ex.length)html+=`<div class="item empty">Nothing yet. Sessions add ${S.profile.eatBack}% of their calories back to today's target.</div>`;
+  for(const e of D.ex)html+=`<div class="item" style="--sc:${e.id==='sauna'?'var(--ink2)':'var(--accent)'}"><span class="dot"></span><div class="main" data-editex="${e.uid}" role="button" tabindex="0"><div class="nm">${esc(e.name)}</div><div class="sub"><i>${e.min} min</i>${e.id==='sauna'?'<i>recovery</i>':''}${(e.sets||[]).map(x=>`<i>${esc(x.n)} ${x.sets||'?'}×${x.reps||'?'}${x.kg?' @ '+x.kg+' kg':''}</i>`).join('')}</div></div><span class="kc">${e.id==='sauna'?'–':fmt(e.kcal)}</span><button class="del" data-delex="${e.uid}" aria-label="Remove">×</button></div>`;
+  html+=`</div><div class="addrow"><button class="btn sm" id="addex">+ Log training</button></div></div>`;
+  html+=`<div class="card lift board">
     <div class="top3">
       <div class="sc"><span class="num">${score}<small>/100</small></span><span>today's score</span></div>
       <div class="lvl"><div class="row between"><span class="t">Lv ${L.n} · ${L.title}</span><span class="streak" title="Days in a row scoring 70+">${flame}${st}</span></div><div class="xp"><i style="width:${L.pct}%"></i></div><div class="m"><span>${fmt(xp)} XP</span><span>${L.to?`${fmt(L.to-xp)} to ${L.nextTitle}`:'Max level'}</span></div></div>
@@ -679,25 +703,11 @@ function renderToday(){
     <div class="chips" style="margin-top:8px"><button data-cq="What should I eat right now?">What now?</button><button data-cq="I'm hungry. What can I still have today?">I'm hungry</button><button data-cq="Plan my dinner so I end the day on target.">Plan dinner</button><button data-cq="I'm low on protein. What's the cheapest high-protein stuff I can buy at the supermarket right now, and how much should I eat?">Cheap protein</button><button data-cq="What high-fibre foods should I add today to hit my fibre target without blowing my calories?">More fibre</button></div>
     ${(D.coach||[]).length?`<div class="coach-last" id="coachlast">${esc(D.coach[D.coach.length-1].content)}</div>`:''}
   </div>
-  <div class="actions">
+  <div class="actions three">
     <button class="btn" id="act-weigh"><svg viewBox="0 0 24 24"><path d="M4 7h16v12H4z"/><path d="M8 7V5h8v2M12 11v3"/></svg>Weigh in${D.weight?`<span class="xs muted">${D.weight} kg</span>`:wEntry?`<span class="xs muted">last ${wEntry.kg}</span>`:''}</button>
-    <button class="btn primary" id="act-say">${MIC}Say a meal</button>
     <button class="btn" id="act-ex"><svg viewBox="0 0 24 24"><path d="M3 12h3M18 12h3M6 8v8M18 8v8M9 6v12M15 6v12M9 12h6"/></svg>Log training</button>
-    ${D.foods.length?`<a class="btn" target="_blank" rel="noopener" href="${gcalFoodUrl(cur)}"><svg viewBox="0 0 24 24"><path d="M4 6h16v14H4z"/><path d="M4 10h16M8 3v4M16 3v4"/></svg>Save to calendar</a>`:`<button class="btn" id="act-cal" disabled style="opacity:.5"><svg viewBox="0 0 24 24"><path d="M4 6h16v14H4z"/><path d="M4 10h16M8 3v4M16 3v4"/></svg>Save to calendar</button>`}
+    ${D.foods.length?`<a class="btn" target="_blank" rel="noopener" href="${gcalFoodUrl(cur)}"><svg viewBox="0 0 24 24"><path d="M4 6h16v14H4z"/><path d="M4 10h16M8 3v4M16 3v4"/></svg>Calendar</a>`:`<button class="btn" id="act-cal" disabled style="opacity:.5"><svg viewBox="0 0 24 24"><path d="M4 6h16v14H4z"/><path d="M4 10h16M8 3v4M16 3v4"/></svg>Calendar</button>`}
   </div>`;
-  for(const m of MEALS){
-    const items=D.foods.filter(f=>f.meal===m);const kc=items.reduce((a,f)=>a+f.per100.kcal*f.grams/100,0);
-    html+=`<div class="card meal"><div class="mh"><h3>${m}</h3><span class="kc">${items.length?fmt(kc)+' kcal':''}</span></div><div class="items">`;
-    if(!items.length)html+=`<div class="item empty">Nothing yet.</div>`;
-    for(const f of items){const sc=fitScore(f.per100),sm=scoreMeta(sc);const g=f.grams/100;
-      html+=`<div class="item" style="--sc:${sm.color}"><span class="dot" title="${sm.label}"></span><div class="main" data-edit="${f.uid}" role="button" tabindex="0"><div class="nm">${esc(f.name)}</div><div class="sub"><i>${f.grams} g</i><i style="color:var(--p)">P ${r0(f.per100.p*g)}</i><i style="color:var(--fib)">Fib ${r0((f.per100.fib||0)*g)}</i><i style="color:var(--c)">C ${r0(f.per100.c*g)}</i><i style="color:var(--f)">F ${r0(f.per100.f*g)}</i></div></div><span class="kc">${fmt(f.per100.kcal*g)}</span><button class="del" data-del="${f.uid}" aria-label="Remove">×</button></div>`}
-    html+=`</div><div class="addrow"><button class="btn sm" data-addmeal="${m}">+ Add to ${m.toLowerCase()}</button><button class="btn sm ghost" data-saymeal="${m}">${MIC} Say it</button></div></div>`;
-  }
-  const exMin=D.ex.reduce((a,e)=>a+e.min,0);
-  html+=`<div class="card meal"><div class="mh"><h3>Training &amp; sauna</h3><span class="kc">${D.ex.length?exMin+' min · −'+fmt(T.ex)+' kcal':''}</span></div><div class="items">`;
-  if(!D.ex.length)html+=`<div class="item empty">Nothing yet. Sessions add ${S.profile.eatBack}% of their calories back to today's target.</div>`;
-  for(const e of D.ex)html+=`<div class="item" style="--sc:${e.id==='sauna'?'var(--ink2)':'var(--accent)'}"><span class="dot"></span><div class="main" data-editex="${e.uid}" role="button" tabindex="0"><div class="nm">${esc(e.name)}</div><div class="sub"><i>${e.min} min</i>${e.id==='sauna'?'<i>recovery</i>':''}${(e.sets||[]).map(x=>`<i>${esc(x.n)} ${x.sets||'?'}×${x.reps||'?'}${x.kg?' @ '+x.kg+' kg':''}</i>`).join('')}</div></div><span class="kc">${e.id==='sauna'?'–':fmt(e.kcal)}</span><button class="del" data-delex="${e.uid}" aria-label="Remove">×</button></div>`;
-  html+=`</div><div class="addrow"><button class="btn sm" id="addex">+ Log training</button><button class="btn sm ghost" id="copyy">Copy yesterday's food</button></div></div>`;
   html+=`<p class="xs muted" style="margin:0 4px">Plan: ${fmt(pl.kcalRest)} kcal rest days · ${pl.protein} g protein · ${pl.fiber} g fibre · ${pl.fat} g fat · ${r1(pl.effRate)} kg/week → ${S.profile.goalWeight} kg around ${longDate(pl.goalEta)}. Swipe left or right to change day.</p>`;
   const el=$('#v-today');el.innerHTML=html;
   $('#dprev').onclick=()=>{cur=addDays(cur,-1);render()};$('#dnext').onclick=()=>{cur=addDays(cur,1);render()};const dt=$('#dtoday');if(dt)dt.onclick=()=>{cur=ymd(new Date());render()};
@@ -708,7 +718,7 @@ function renderToday(){
   el.querySelectorAll('[data-addmeal]').forEach(b=>b.onclick=()=>{pendingMeal=b.dataset.addmeal;go('add')});
   el.querySelectorAll('[data-saymeal]').forEach(b=>b.onclick=()=>openSpeak(b.dataset.saymeal));
   const qs=quests(cur);el.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{const q=qs[+b.dataset.q];if(!q.done)q.act();else toast('Done: '+q.n)});
-  $('#addex').onclick=()=>openExercise();$('#act-ex').onclick=()=>openExercise();$('#act-weigh').onclick=openWeigh;$('#act-say').onclick=()=>openSpeak();
+  $('#addex').onclick=()=>openExercise();$('#act-ex').onclick=()=>openExercise();$('#act-weigh').onclick=openWeigh;const say2=$('#act-say2');if(say2)say2.onclick=()=>openSpeak();
   const brd=el.querySelector('.board .top3');if(brd){brd.style.cursor='pointer';brd.onclick=()=>go('progress')}
   el.querySelectorAll('.mring').forEach(m=>{const act=()=>{const k=m.dataset.m;if(k==='p'||k==='fib')openPicks(k);else{pane='search';go('add');const q=k==='c'?'volkoren':'kwark';$('#q').value=q;doSearch(q)}};m.onclick=act;m.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();act()}}});
   $('#coachgo').onclick=()=>{const q=$('#coachq').value.trim();$('#coachq').value='';openCoach(q||'What should I eat right now?')};
