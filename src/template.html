@@ -206,6 +206,8 @@ label.f{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--
 .seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;background:var(--surface2);border-radius:13px;padding:3px;gap:3px;border:1px solid var(--line)}
 .seg button{padding:11px 6px;border-radius:10px;font-weight:600;font-size:13.5px;color:var(--ink2)}
 .seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(16,36,29,.14)}
+.mealseg button{font-size:13px;padding:10px 4px}
+.mealseg button.on{background:var(--accent);color:var(--on-accent);box-shadow:none}
 .pane[hidden]{display:none}
 .pane{display:flex;flex-direction:column;gap:12px}
 /* scanner */
@@ -302,10 +304,16 @@ label.f{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--
 .micbtn{position:relative;width:46px;padding:0}
 .micbtn.listening{background:var(--bad);color:#fff;border-color:transparent;animation:pulse 1s ease-in-out infinite}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--bad) 45%,transparent)}50%{box-shadow:0 0 0 10px transparent}}
-.pickrow{display:grid;grid-template-columns:1fr 64px 52px 30px;gap:6px;align-items:center}
-.pickrow input{padding:8px;font-size:14px;border-radius:9px}
-.pickrow .pk{text-align:right;font-family:var(--display);font-weight:700;font-size:16px}
-.pickrow .del{width:30px;height:34px;border-radius:9px;color:var(--ink2);display:grid;place-items:center;font-size:16px}
+.pickrow{display:grid;grid-template-columns:1fr auto;gap:6px 8px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.pickrow:nth-of-type(2){border-top:0}
+.pickrow input{padding:8px 10px;font-size:14px;border-radius:9px}
+.pickrow .pk{text-align:right;font-family:var(--display);font-weight:700;font-size:17px}
+.pickrow .del{width:36px;height:36px;border-radius:9px;color:var(--ink2);display:grid;place-items:center;font-size:18px}
+.pickrow .qty{display:inline-flex;align-items:center;gap:4px}
+.pickrow .qty button{width:36px;height:36px;border-radius:9px;background:var(--surface2);border:1px solid var(--line);font-size:18px;font-weight:600}
+.pickrow .qty b{min-width:110px;text-align:center;font-size:13px;font-weight:600;cursor:pointer}
+.pickrow .exact-list{grid-column:1/-1;display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.pickrow .exact-list[hidden]{display:none}
 .hidden{display:none!important}
 .plancard .big{font-size:40px;line-height:1}
 .plancard .arrow{color:var(--accent)}
@@ -715,11 +723,12 @@ function removeFood(id){const D=day(cur);const i=D.foods.findIndex(f=>f.uid===id
 function removeEx(id){const D=day(cur);const i=D.ex.findIndex(e=>e.uid===id);if(i<0)return;const [it]=D.ex.splice(i,1);save();render();toast(`Removed ${it.name}`,{label:'Undo',fn:()=>{day(cur).ex.splice(Math.min(i,day(cur).ex.length),0,it);save();render()}})}
 function openEditFood(id){const f=day(cur).foods.find(x=>x.uid===id);if(!f)return;const n=f.per100;
   openSheet(`<h2>${esc(f.name)}</h2><div class="small muted">${esc(f.brand||'')}${f.brand?' · ':''}${r0(n.kcal)} kcal · P ${r1(n.p)} · fibre ${n.fib==null?'?':r1(n.fib)} per 100 g</div>
-    <div class="grid2"><label class="f">Amount (g or ml)<input type="number" id="eg" inputmode="decimal" value="${f.grams}"></label><label class="f">Meal<select id="em">${MEALS.map(m=>`<option ${m===f.meal?'selected':''}>${m}</option>`).join('')}</select></label></div>
+    <div class="grid2"><label class="f">Amount (g or ml)<input type="text" id="eg" inputmode="decimal" value="${f.grams}"></label><div class="field"><label>Meal</label><div class="seg mealseg" id="em">${MEALS.map(m=>`<button data-meal="${m}" class="${m===f.meal?'on':''}">${m}</button>`).join('')}</div></div></div>
     <div class="preview"><div><span class="num" id="ek">${fmt(n.kcal*f.grams/100)}</span> <span class="small muted">kcal</span></div><div class="m" id="emac"></div></div>
     <div class="row"><button class="btn primary wide" id="esave">Save</button><button class="btn danger" id="edel">Delete</button></div>`);
   const upd=()=>{const g=(parseFloat($('#eg').value)||0)/100;$('#ek').textContent=fmt(n.kcal*g);$('#emac').innerHTML=`<span>P <b>${r0(n.p*g)}</b></span><span>Fib <b>${n.fib==null?'?':r0(n.fib*g)}</b></span><span>C <b>${r0(n.c*g)}</b></span><span>Fat <b>${r0(n.f*g)}</b></span>`};$('#eg').oninput=upd;upd();
-  $('#esave').onclick=()=>{const g=parseFloat($('#eg').value);if(!(g>0)){toast('Enter an amount');return}f.grams=g;f.meal=$('#em').value;save();closeSheet();render();toast('Updated')};
+  let eMeal=f.meal;$$('#em button').forEach(b=>b.onclick=()=>{eMeal=b.dataset.meal;$$('#em button').forEach(x=>x.classList.toggle('on',x===b))});
+  $('#esave').onclick=()=>{const g=numv($('#eg'));if(!(g>0)){toast('Enter an amount');return}f.grams=g;f.meal=eMeal;save();closeSheet();render();toast('Updated')};
   $('#edel').onclick=()=>{closeSheet();removeFood(id)};}
 function openEditEx(id){const e=day(cur).ex.find(x=>x.uid===id);if(!e)return;
   openSheet(`<h2>${esc(e.name)}</h2><div class="grid2"><label class="f">Name<input type="text" id="xn" value="${esc(e.name)}"></label><label class="f">Minutes<input type="number" id="xm" inputmode="numeric" value="${e.min}"></label></div>
@@ -774,17 +783,19 @@ function showProduct(p){
     <ul class="reasons">${rs.map(([c,t])=>`<li style="--rc:${RC[c]}">${t}</li>`).join('')}</ul>
     <div class="eyebrow">Per 100 g</div>
     <div class="ntable"><div><div class="k">kcal</div><div class="v">${r0(n.kcal)}</div></div><div><div class="k">Protein</div><div class="v">${r1(n.p)}</div></div><div><div class="k">Fibre</div><div class="v">${n.fib==null?'?':r1(n.fib)}</div></div><div><div class="k">Carbs</div><div class="v">${r1(n.c)}</div></div><div><div class="k">Fat</div><div class="v">${r1(n.f)}</div></div><div><div class="k">Sat. fat</div><div class="v">${n.sat==null?'?':r1(n.sat)}</div></div><div><div class="k">Sugar</div><div class="v">${n.sug==null?'?':r1(n.sug)}</div></div><div><div class="k">P/100kcal</div><div class="v">${n.kcal?r1(n.p/n.kcal*100):'–'}</div></div></div>
-    <div class="grid2"><label class="f">Amount (g or ml)<input type="text" id="grams" inputmode="decimal" enterkeyhint="done" autocomplete="off" value="${def}"></label><label class="f">Meal<select id="meal">${MEALS.map(m=>`<option ${m===guessMeal()?'selected':''}>${m}</option>`).join('')}</select></label></div>
+    <div class="field"><label>Meal</label><div class="seg mealseg" id="meal">${MEALS.map(m=>`<button data-meal="${m}" class="${m===guessMeal()?'on':''}">${m}</button>`).join('')}</div></div>
+    <label class="f">Amount (g or ml)<input type="text" id="grams" inputmode="decimal" enterkeyhint="done" autocomplete="off" value="${def}"></label>
     <div class="chips" id="gchips">${[...new Set([p.serving>0?r0(p.serving):null,30,50,100,150,200,250].filter(Boolean))].map(g=>`<button data-g="${g}" class="${g===def?'on':''}">${g===r0(p.serving)&&p.src!=='staple'?'1 serving · ':''}${g} g</button>`).join('')}</div>
     <div class="preview"><div><span class="num" id="pv-kcal">0</span> <span class="small muted">kcal</span></div><div class="m" id="pv-m"></div></div>
-    <div class="row"><button class="btn primary wide" id="addit">Add to ${niceDate(cur).toLowerCase()==='today'?'today':niceDate(cur)}</button><button class="btn ghost" id="cancel">Cancel</button></div>`);
+    <div class="row"><button class="btn primary wide" id="addit">Add to ${guessMeal().toLowerCase()}${niceDate(cur).toLowerCase()==='today'?'':' · '+niceDate(cur)}</button><button class="btn ghost" id="cancel">Cancel</button></div>`);
+  let selMeal=guessMeal();$$('#meal button').forEach(b=>b.onclick=()=>{selMeal=b.dataset.meal;$$('#meal button').forEach(x=>x.classList.toggle('on',x===b));$('#addit').textContent=`Add to ${selMeal.toLowerCase()}${niceDate(cur).toLowerCase()==='today'?'':' · '+niceDate(cur)}`;buzz(8)});
   const upd=()=>{const g=(numv($('#grams'))||0)/100;$('#pv-kcal').textContent=fmt(n.kcal*g);$('#pv-m').innerHTML=`<span>P <b>${r0(n.p*g)}</b></span><span>Fib <b>${n.fib==null?'?':r0(n.fib*g)}</b></span><span>C <b>${r0(n.c*g)}</b></span><span>Fat <b>${r0(n.f*g)}</b></span>`;$$('#gchips button').forEach(b=>b.classList.toggle('on',+b.dataset.g===numv($('#grams'))))};
   $('#grams').oninput=upd;upd();
   $$('#gchips button').forEach(b=>b.onclick=()=>{$('#grams').value=b.dataset.g;upd()});
   $('#cancel').onclick=closeSheet;
   $('#fav').onclick=()=>{if(isFav){S.favs=S.favs.filter(f=>!((f.barcode&&f.barcode===p.barcode)||f.name===p.name))}else S.favs.unshift(strip(p));save();showProduct(p)};
   $('#addit').onclick=()=>{const g=numv($('#grams'));if(!(g>0)){toast('Enter an amount');return}
-    day(cur).foods.push({uid:uid(),name:p.src==='staple'?enName(p):p.name,brand:p.brand||'',barcode:p.barcode||null,grams:g,meal:$('#meal').value,per100:{...n}});
+    day(cur).foods.push({uid:uid(),name:p.src==='staple'?enName(p):p.name,brand:p.brand||'',barcode:p.barcode||null,grams:g,meal:selMeal,per100:{...n}});
     S.recent=[strip(p),...S.recent.filter(r=>!((r.barcode&&r.barcode===p.barcode)||r.name===p.name))].slice(0,40);
     save();closeSheet();pendingMeal=null;toast(`Added ${p.src==='staple'?enName(p):p.name}`);buzz();go('today');setTimeout(checkCelebrations,500)};
 }
@@ -952,7 +963,8 @@ function openExercise(prefill){
 
 /* ---------- SAY WHAT YOU ATE ---------- */
 const MEAL_SYSTEM=`You turn a spoken or typed description of food into logged items for a Dutch user (Ivan) with Dutch supermarket portions. Reply with JSON only, no prose, in exactly this shape:
-{"reply":"one short friendly sentence","question":null or "one clarifying question","items":[{"name":"...","grams":number,"per100":{"kcal":n,"p":n,"c":n,"f":n,"fib":n,"sug":n}}]}
+{"reply":"one short friendly sentence","question":null or "one clarifying question","items":[{"name":"...","count":number or null,"unit":"slice|roll|wrap|egg|piece|glass|cup|bowl|tbsp|handful|ball|null","grams":number,"per100":{"kcal":n,"p":n,"c":n,"f":n,"fib":n,"sug":n}}]}
+Use count+unit whenever the food is naturally counted (a roll, 2 slices, half an avocado = count 0.5 unit avocado); grams is always the total weight.
 Rules: estimate realistic portions in grams (a slice of bread 35 g, a slice of cheese 20 g, a tablespoon of mayo 15 g, a chicken breast 150 g, a bowl of skyr 250 g, a banana 120 g). per100 = nutrition per 100 g with protein p, carbs c, fat f, fibre fib, sugar sug. If something essential is unknown (what kind of bread, what sauce, how big) ask ONE short question and still return your best-guess items so far. If the conversation already contains your question and an answer, do NOT ask again: finalise the items. Name items in English, keeping a Dutch word in brackets only when it is the real product name (kwark, skyr, kroket, stroopwafel). Understand Dutch input. If the user corrects an amount, removes something or adds something, return the FULL updated items list. Never return markdown.`;
 function extractJSON(t){const m=String(t).match(/\{[\s\S]*\}/);if(!m)throw new Error('no JSON');return JSON.parse(m[0])}
 function defaultGrams(st){const n=st.name.toLowerCase(),x=st.per100;
@@ -996,8 +1008,11 @@ avocados:'Avocado',eggs:'Ei (egg)','boiled egg':'Ei (egg)','gekookt ei':'Ei (egg
 'chicken breast':'Kipfilet gegaard',kipfilet:'Kipfilet gegaard',chicken:'Kipfilet gegaard',kip:'Kipfilet gegaard','chicken thigh':'Kippendijfilet',kippendij:'Kippendijfilet',turkey:'Kalkoenfilet',kalkoen:'Kalkoenfilet',mince:'Rundergehakt',gehakt:'Rundergehakt','minced beef':'Rundergehakt','ground beef':'Rundergehakt',salmon:'Zalmfilet',zalm:'Zalmfilet',cod:'Kabeljauwfilet',kabeljauw:'Kabeljauwfilet',tuna:'Tonijn',tonijn:'Tonijn',shrimp:'Garnalen',prawns:'Garnalen',garnalen:'Garnalen',cheese:'Kaas 30+',kaas:'Kaas 30+','old cheese':'Kaas 48+','oude kaas':'Kaas 48+','jonge kaas':'Kaas 48+',gouda:'Kaas 48+','cottage cheese':'Hüttenkäse',huttenkase:'Hüttenkäse','hüttenkäse':'Hüttenkäse',skyr:'Skyr',kwark:'Magere kwark',quark:'Magere kwark',yoghurt:'Magere yoghurt',yogurt:'Magere yoghurt',milk:'Halfvolle melk',melk:'Halfvolle melk',lentils:'Linzen',linzen:'Linzen',chickpeas:'Kikkererwten',kikkererwten:'Kikkererwten','kidney beans':'Kidneybonen',kidneybonen:'Kidneybonen','black beans':'Zwarte bonen','zwarte bonen':'Zwarte bonen',beans:'Kidneybonen',bonen:'Kidneybonen','baked beans':'Witte bonen','witte bonen':'Witte bonen',broccoli:'Broccoli',spinach:'Spinazie',spinazie:'Spinazie',kale:'Boerenkool',boerenkool:'Boerenkool','brussels sprouts':'Spruitjes',spruitjes:'Spruitjes',pepper:'Paprika',paprika:'Paprika','bell pepper':'Paprika',cucumber:'Komkommer',komkommer:'Komkommer',tomato:'Tomaat',tomaat:'Tomaat',tomaten:'Tomaat',mushrooms:'Champignons',champignons:'Champignons',cauliflower:'Bloemkool',bloemkool:'Bloemkool','green beans':'Sperziebonen',sperziebonen:'Sperziebonen',apple:'Appel',appel:'Appel',banana:'Banaan',banaan:'Banaan',blueberries:'Blauwe bessen','blauwe bessen':'Blauwe bessen',raspberries:'Frambozen',frambozen:'Frambozen',strawberries:'Aardbeien',aardbeien:'Aardbeien',orange:'Sinaasappel',sinaasappel:'Sinaasappel',kiwi:'Kiwi',stroopwafel:'Stroopwafel',kroket:'Kroket',kroketten:'Kroket',vla:'Vla',wrap:'Wrap',wraps:'Wrap',tortilla:'Wrap',tortillas:'Wrap',bread:'Volkorenbrood',brood:'Volkorenbrood',egg:'Ei (egg)',ei:'Ei (egg)',eieren:'Ei (egg)'};
 Object.assign(ALIAS,ALIAS2);
 /* grams per piece, by staple-name prefix */
-const UNIT_G={'Pistolet':90,'Ciabatta':90,'Stokbrood':60,'Witbrood':35,'Volkorenbrood':35,'Roggebrood':45,'Croissant':55,'Beschuit':10,'Cracker':10,'Rijstwafel':9,'Pannenkoek':80,'Tosti':130,'Wrap':60,'Ei (egg)':60,'Omelet':150,'Banaan':120,'Appel':180,'Peer':170,'Sinaasappel':150,'Mandarijn':70,'Kiwi':75,'Avocado':140,'Mozzarella':125,'Kaas 30+':20,'Kaas 48+':20,'Geitenkaas':25,'Feta':30,'Kipfilet (beleg':20,'Ham (beleg)':20,'Salami':10,'Spek':15,'Rookworst':250,'Kroket':70,'Frikandel':85,'Bitterballen':20,'Stroopwafel':35,'Koekje':12,'Proteïnereep':50,'Pizza':120,'Tomaat':100,'Komkommer':300,'Paprika':150,'Wortel':70,'Aardappel':120,'Zoete aardappel':150,'Dadels':8,'Olijven':4,'Burger':200,'Kipdrumstick':100,'Kipvleugels':40,'Sushi':25,'Chocolade (melk)':25,'Pure chocolade':25,'Proteïneshake':300,'Cappuccino':200,'Koffie zwart':150,'Bier':300,'Wijn':150,'Cola':330,'Cola zero':330,'Sinaasappelsap':200,'Halfvolle melk':250,'Volle melk':250,'Sojamelk':250,'Havermelk':250,'Kipfilet gegaard':150,'Kippendijfilet':120,'Zalmfilet':150,'Kabeljauwfilet':150,'Biefstuk':180,'Varkenshaas':150,'Kipfilet (chicken':150,'Blauwe bessen':15,'Aardbeien':15,'Druiven':6,'Whey':30,'Edamame':100,'IJs':80,'Appeltaart':100,'Poffertjes':100,'Döner':250,'Shoarma':200,'Kapsalon':600,'Soep':250,'Tomatensoep':250,'Erwtensoep':250,'Curry':350,'Stamppot':350,'Nasi':350,'Pasta met':350,'Patat':150,'Poké':400};
-const SLICE_G={'Kaas':20,'Geitenkaas':20,'Mozzarella':25,'Feta':20,'Kipfilet (beleg':20,'Ham':20,'Salami':8,'Spek':15,'Gerookte zalm':25,'Tomaat':20,'Komkommer':8,'Pizza':120,'Appeltaart':100,'Rookworst':25,'Avocado':20,'Appel':20,'Meloen':120,'Ananas':80};
+const UNIT_G={'Pistolet':75,'Ciabatta':90,'Stokbrood':60,'Witbrood':35,'Volkorenbrood':35,'Roggebrood':45,'Croissant':55,'Beschuit':10,'Cracker':10,'Rijstwafel':9,'Pannenkoek':80,'Tosti':130,'Wrap':45,'Ei (egg)':60,'Omelet':150,'Banaan':120,'Appel':180,'Peer':170,'Sinaasappel':150,'Mandarijn':70,'Kiwi':75,'Avocado':140,'Mozzarella':125,'Kaas 30+':20,'Kaas 48+':20,'Geitenkaas':25,'Feta':30,'Kipfilet (beleg':20,'Ham (beleg)':20,'Salami':10,'Spek':15,'Rookworst':250,'Kroket':70,'Frikandel':85,'Bitterballen':20,'Stroopwafel':35,'Koekje':12,'Proteïnereep':50,'Pizza':120,'Tomaat':100,'Komkommer':300,'Paprika':150,'Wortel':70,'Aardappel':120,'Zoete aardappel':150,'Dadels':8,'Olijven':4,'Burger':200,'Kipdrumstick':100,'Kipvleugels':40,'Sushi':25,'Chocolade (melk)':25,'Pure chocolade':25,'Proteïneshake':300,'Cappuccino':200,'Koffie zwart':150,'Bier':300,'Wijn':150,'Cola':330,'Cola zero':330,'Sinaasappelsap':200,'Halfvolle melk':250,'Volle melk':250,'Sojamelk':250,'Havermelk':250,'Kipfilet gegaard':150,'Kippendijfilet':120,'Zalmfilet':150,'Kabeljauwfilet':150,'Biefstuk':180,'Varkenshaas':150,'Kipfilet (chicken':150,'Blauwe bessen':15,'Aardbeien':15,'Druiven':6,'Whey':30,'Edamame':100,'IJs':80,'Appeltaart':100,'Poffertjes':100,'Döner':250,'Shoarma':200,'Kapsalon':600,'Soep':250,'Tomatensoep':250,'Erwtensoep':250,'Curry':350,'Stamppot':350,'Nasi':350,'Pasta met':350,'Patat':150,'Poké':400};
+const SLICE_G={'Kaas':20,'Geitenkaas':20,'Mozzarella':20,'Feta':20,'Kipfilet (beleg':20,'Ham':20,'Salami':8,'Spek':15,'Gerookte zalm':25,'Tomaat':20,'Komkommer':8,'Pizza':120,'Appeltaart':100,'Rookworst':25,'Avocado':20,'Appel':20,'Meloen':120,'Ananas':80};
+const PIECE={'Pistolet':'roll','Ciabatta':'ciabatta','Stokbrood':'piece','Volkorenbrood':'slice','Witbrood':'slice','Roggebrood':'slice','Wrap':'wrap','Ei (egg)':'egg','Omelet':'omelette','Avocado':'avocado','Banaan':'banana','Appel':'apple','Peer':'pear','Sinaasappel':'orange','Mandarijn':'mandarin','Kiwi':'kiwi','Kroket':'kroket','Frikandel':'frikandel','Bitterballen':'bitterbal','Stroopwafel':'stroopwafel','Koekje':'cookie','Cracker':'cracker','Rijstwafel':'rice cake','Beschuit':'beschuit','Croissant':'croissant','Pannenkoek':'pancake','Tosti':'tosti','Mozzarella':'ball','Kaas 30+':'slice','Kaas 48+':'slice','Geitenkaas':'slice','Feta':'piece','Ham (beleg)':'slice','Kipfilet (beleg':'slice','Salami':'slice','Spek':'rasher','Tomaat':'tomato','Paprika':'pepper','Wortel':'carrot','Aardappel':'potato','Zoete aardappel':'sweet potato','Proteïnereep':'bar','Pizza':'slice','Dadels':'date','Olijven':'olive','Burger':'burger','Kipdrumstick':'drumstick','Kipvleugels':'wing','Sushi':'piece','Bier':'glass','Wijn':'glass','Cola':'can','Cola zero':'can','Cappuccino':'cup','Koffie zwart':'cup','Halfvolle melk':'glass','Volle melk':'glass','Sojamelk':'glass','Havermelk':'glass','Sinaasappelsap':'glass','Proteïneshake':'shake','Kipfilet gegaard':'fillet','Kipfilet (chicken':'fillet','Kippendijfilet':'thigh','Zalmfilet':'fillet','Kabeljauwfilet':'fillet','Biefstuk':'steak','Varkenshaas':'portion','Whey':'scoop','IJs':'scoop','Appeltaart':'slice','Rookworst':'sausage','Chocolade (melk)':'row','Pure chocolade':'row'};
+function pieceLabel(st){const nm=typeof st==='string'?st:st.name;for(const k of Object.keys(PIECE).sort((a,b)=>b.length-a.length))if(nm.startsWith(k))return PIECE[k];return null}
+const CONTAINER_LABEL=[[/glass|glas|glazen|glasses/,'glass'],[/cup|cups|kop|kopje|mok|beker/,'cup'],[/bowl|bowls|kom|kommetje|schaaltje|bakje|bakjes/,'bowl'],[/plate|bord|portion|portie/,'plate'],[/handful|handfuls|handje|handjes|hand/,'handful'],[/tablespoon|tablespoons|tbsp|eetlepel|eetlepels|^el$/,'tbsp'],[/teaspoon|teaspoons|tsp|theelepel|theelepels|^tl$/,'tsp'],[/scoop|scoops|schep|scheppen/,'scoop'],[/bottle|fles|flesje/,'bottle'],[/can|blik|blikje/,'can'],[/bar|reep|repen/,'bar']];
 const CONTAINERS=[[/\b(glass|glas|glazen|glasses)\b/,250],[/\b(cup|cups|kop|kopje|mok|beker)\b/,250],[/\b(bowl|bowls|kom|kommetje|schaaltje|bakje|bakjes)\b/,250],[/\b(plate|bord|portion|portie)\b/,350],[/\b(handful|handfuls|handje|handjes|hand)\b/,30],[/\b(tablespoon|tablespoons|tbsp|eetlepel|eetlepels|el)\b/,15],[/\b(teaspoon|teaspoons|tsp|theelepel|theelepels|tl)\b/,5],[/\b(scoop|scoops|schep|scheppen)\b/,30],[/\b(bottle|fles|flesje)\b/,500],[/\b(can|blik|blikje)\b/,330],[/\b(bar|reep|repen)\b/,50],[/\b(piece|pieces|stuk|stuks|stukje|stukjes)\b/,null],[/\b(slice|slices|slcies|sneetje|sneetjes|snee|plak|plakje|plakjes|boterham)\b/,'slice'],[/\b(ball|balls|balletje|balletjes|bolletje|bolletjes)\b/,'ball']];
 const NUMWORDS={a:1,an:1,one:1,een:1,'één':1,two:2,twee:2,three:3,drie:3,four:4,vier:4,five:5,vijf:5,six:6,zes:6,half:0.5,halve:0.5,halfa:0.5,quarter:0.25,kwart:0.25,couple:2,paar:3,few:3,anderhalf:1.5,'1/2':0.5,'1,5':1.5};
 const STOPW=new Set('i ive had have ate eat eating a an the some my me just then also was it its and with on of for in at lunch breakfast dinner snack today this morning tonight afternoon evening ik heb gegeten een het de en met vandaag voor bij als als ook nog wat beetje amount bit little small large big klein groot grote mini about around roughly maybe plus extra shredded shreeded grated geraspt sliced chopped cooked raw fresh dried baked fried gebakken gekookt zelfgemaakt homemade organic bio biologisch'.split(' '));
@@ -1015,7 +1030,7 @@ function findFoods(seg){
 }
 function unitGrams(st,unit,size){const nm=st.name;const pref=o=>{for(const k in o)if(nm.startsWith(k))return o[k];return null};
   if(unit==='slice'){const g=pref(SLICE_G);if(g)return g;if(/brood|bread|pistolet|witbrood|roggebrood/i.test(nm))return 35;return pref(UNIT_G)||30}
-  if(unit==='ball'){if(/mozzarella/i.test(nm))return size==='small'?15:125;return 30}
+  if(unit==='ball'){if(/mozzarella/i.test(nm))return size==='small'?12:125;return 30}
   if(typeof unit==='number'){if(/havermout|granola|muesli|cornflakes/i.test(nm))return Math.min(unit,60);if(/whey|proteïneshake/i.test(nm)&&unit<100)return 30;return unit}
   const g=pref(UNIT_G);return g||null}
 function parseSegment(seg){
@@ -1027,14 +1042,17 @@ function parseSegment(seg){
   for(const w of Object.keys(NUMWORDS)){if(new RegExp('(^|\\s)'+w.replace('/','\\/')+'(\\s|$)').test(s)){qty=qty==null?NUMWORDS[w]:qty;if(NUMWORDS[w]===0.5||w==='half'||w==='halve')qty=0.5}}
   const size=/\b(small|klein|kleine|mini|little)\b/.test(s)?'small':/\b(large|big|groot|grote|huge|dikke|flinke)\b/.test(s)?'large':null;
   const tiny=/\b(small amount|bit of|a bit|little bit|beetje|klein beetje|dash|splash|scheutje|touch of|some)\b/.test(s)&&!/\d/.test(s);
-  let unit=null;for(const [re,g] of CONTAINERS){if(re.test(s)){unit=g;break}}
+  let unit=null,unitWord=null;for(const [re,g] of CONTAINERS){const mm=re.exec(s);if(mm){unit=g;unitWord=mm[1];break}}
   let grams=null;if(m=s.match(/(\d+(?:\.\d+)?)\s*(?:g|gram|grams|gr|ml)\b/))grams=parseFloat(m[1]);
+  if(foods[0]&&(foods[0].key==='sandwich'||foods[0].key==='tosti')&&qty==null&&unit==null)qty=2;
   const items=foods.map((f,i)=>{let st=f.st;if(unit==='slice'&&/^Kipfilet gegaard/.test(st.name))st=stapleFor('Kipfilet (beleg')||st;
-    let g;if(grams!=null&&i===0)g=grams;
-    else if(i===0&&(qty!=null||unit!=null)){const q=qty==null?1:qty;const u=unitGrams(st,unit,size);g=u?u*q*(size==='small'&&unit!=='ball'?0.75:size==='large'?1.35:1):defaultGrams(st)*q}
+    let g,unitLabel=null,unitG=null,count=null;
+    if(grams!=null&&i===0)g=grams;
+    else if(i===0&&(qty!=null||unit!=null)){const q=qty==null?1:qty;const u=unitGrams(st,unit,size);if(u){const mod=(size==='small'&&unit!=='ball'?0.75:size==='large'?1.35:1);g=u*q*mod;unitG=u*mod;count=q;unitLabel=unit==='slice'?'slice':unit==='ball'?'ball':typeof unit==='number'?(CONTAINER_LABEL.find(([re])=>re.test(unitWord||''))||[0,'piece'])[1]:(pieceLabel(st)||'piece')}else g=defaultGrams(st)*q}
     else if(i===0&&tiny)g=/mayonaise|slasaus|pesto|olijfolie|boter|ketchup|honing|jam|sojasaus|pindakaas|roomkaas/i.test(st.name)?10:30;
     else g=defaultGrams(st)*(size==='small'?0.75:size==='large'?1.35:1);
-    return{name:enName(st),_st:st.name,grams:Math.round(g),per100:{...st.per100},fuzzy:!!f.fuzzy}});
+    if(!unitLabel){const pl=pieceLabel(st);const u=unitGrams(st,pl==='slice'?'slice':null,null);if(pl&&u&&g>=u*0.4){count=Math.max(0.5,Math.round(g/u*2)/2);g=count*u;unitG=u;unitLabel=pl}}
+    return{name:enName(st),_st:st.name,grams:Math.round(g),per100:{...st.per100},fuzzy:!!f.fuzzy,unit:unitLabel?{label:unitLabel,g:Math.round(unitG)}:null,count}});
   return{items,unknown:[]};
 }
 function tokensUnknown(s){return s.split(/\s+/).map(w=>w.replace(/[^a-zà-ü]/g,'')).filter(w=>w.length>=4&&!STOPW.has(w)&&!Object.keys(NUMWORDS).includes(w)&&!CONTAINERS.some(([re])=>re.test(w)))}
@@ -1042,6 +1060,7 @@ function tokensUnknown(s){return s.split(/\s+/).map(w=>w.replace(/[^a-zà-ü]/g,
 const ADJ=[[/\b(much|a lot|way|far|lot) (smaller|less|lower|fewer|minder|kleiner)\b|\btiny\b|\bbarely\b|\bjust a (little|bit|touch)\b|\bveel minder\b/,0.33],[/\b(a bit|slightly|little|bit|tad|iets|beetje) (smaller|less|lower|minder|kleiner)\b/,0.75],[/\b(smaller|less|lower|fewer|half|halve|halved|minder|kleiner|de helft)\b/,0.5],[/\b(a bit|slightly|little|bit|tad|iets|beetje) (more|bigger|larger|meer|groter)\b/,1.25],[/\b(much|a lot|way|far|lot) (more|bigger|larger|meer|groter)\b|\bhuge\b|\bmassive\b|\bveel meer\b/,2],[/\b(double|twice|two times|dubbel|dubbele)\b/,2],[/\b(triple|three times|driedubbel)\b/,3],[/\b(more|bigger|larger|extra|meer|groter)\b/,1.5]];
 const REMOVE=/\b(no|without|remove|delete|skip|drop|forget|not the|didn'?t have|wasn'?t|weren'?t|minus|zonder|geen|niet|weg)\b/;
 const WHOLE=/\b(whole|entire|full|hele|heel|complete)\b/;
+function qtyText(it){if(it.unit&&it.count){const c=it.count;const whole=Math.floor(c),frac=c-whole;const fs=frac>=0.74?'¾':frac>=0.49?'½':frac>=0.24?'¼':'';const n=(whole?String(whole):'')+fs||String(c);const lbl=it.unit.label;const pl=(c<=1)?lbl:lbl==='slice'?'slices':lbl==='glass'?'glasses':lbl==='rice cake'?'rice cakes':lbl.endsWith('s')?lbl:lbl+'s';return `${n} ${pl} · ${it.grams} g`}return `${it.grams} g`}
 function applyAdjustment(items,msg){
   const s=correctTypos(msg.toLowerCase());
   const foods=findFoods(s);if(!foods.length)return null;
@@ -1058,7 +1077,7 @@ function applyAdjustment(items,msg){
     else if(whole){const u=unitGrams(t.f.st,null,null);g=u||it.grams*2}
     else if(adj)g=it.grams*adj[1];
     else if(seg.items.length){const x=seg.items.find(x=>x.name===enName(t.f.st));if(x)g=x.grams}
-    it.grams=Math.max(1,Math.round(g));changed.push(`${it.name} → ${it.grams} g`)}
+    it.grams=Math.max(1,Math.round(g));if(it.unit&&it.unit.g)it.count=Math.round(it.grams/it.unit.g*2)/2;changed.push(`${it.name} → ${qtyText(it)}`)}
   return changed;
 }
 
@@ -1073,8 +1092,8 @@ function ruleMeal(conv){
   const askedBefore=conv.some(m=>m.role==='assistant'&&/\?/.test(m.content));
   let question=null;
   if(!askedBefore&&all.length<=2&&(composite||!all.length))question=composite?'What was on or in it? Bread type, meat or cheese, sauce, anything else?':'What exactly did you have, and roughly how much?';
-  const reply=lastChanged?`Updated: ${lastChanged.join(', ')}. Anything else, or add it.`:all.length?`Got it: ${all.map(i=>`${i.name} ${i.grams} g`).join(', ')}. Tell me what to change (“the beets were much less”, “no mayo”, “chicken 60 g”) or add it.${uniqUnknown.length?` I don’t know “${uniqUnknown.join('”, “')}” offline, add those by scanning or on the Manual tab.`:''}`:'I couldn’t match that to anything I know offline.';
-  return{reply,question:lastChanged?null:question,items:all.map(({name,grams,per100})=>({name,grams,per100}))};
+  const reply=lastChanged?`Updated: ${lastChanged.join(', ')}. Anything else, or add it.`:all.length?`Got it: ${all.map(i=>`${i.name} (${qtyText(i)})`).join(', ')}. Tell me what to change (“the beets were much less”, “no mayo”, “chicken 60 g”) or add it.${uniqUnknown.length?` I don’t know “${uniqUnknown.join('”, “')}” offline, add those by scanning or on the Manual tab.`:''}`:'I couldn’t match that to anything I know offline.';
+  return{reply,question:lastChanged?null:question,items:all.map(({name,grams,per100,unit,count,_st})=>({name,grams,per100,unit,count,_st}))};
 }
 
 async function parseMeal(conv){
@@ -1086,7 +1105,8 @@ async function parseMeal(conv){
 function openSpeak(meal,preset){
   if(!S.profile){toast('Set up your plan first');return}
   meal=meal||guessMeal();const conv=[];let items=[];
-  openSheet(`<div class="row between"><h2>Say what you ate</h2><select id="spmeal" style="width:auto;padding:8px 10px">${MEALS.map(m=>`<option ${m===meal?'selected':''}>${m}</option>`).join('')}</select></div>
+  openSheet(`<h2>Say what you ate</h2>
+    <div class="seg mealseg" id="spmeal">${MEALS.map(m=>`<button data-meal="${m}" class="${m===meal?'on':''}">${m}</button>`).join('')}</div>
     <div class="xs muted">${coachMode()==='rules'?'Offline parser: I know common Dutch staples and ask one follow-up. Add your API key on the Plan tab and I understand anything you say.':'Understood by Claude. I may ask one follow-up question, then you confirm the portions.'}</div>
     <div class="thread" id="spthread"><div class="msg a">What did you eat? Tap the mic and talk, or type. For example: "I had a sandwich" or "300 g skyr with blueberries".</div></div>
     <div id="spitems" hidden style="display:flex;flex-direction:column;gap:6px"></div>
@@ -1094,23 +1114,41 @@ function openSpeak(meal,preset){
     <div class="row between">${langChips()}<span class="xs muted" id="spstatus"></span></div>`);
   bindLang($('#panel'));
   const thread=$('#spthread'),box=$('#spitems');
+  $$('#spmeal button').forEach(b=>b.onclick=()=>{meal=b.dataset.meal;$$('#spmeal button').forEach(x=>x.classList.toggle('on',x===b));buzz(8);drawItems()});
   const push=(role,content)=>{conv.push({role,content});const d=document.createElement('div');d.className='msg '+(role==='user'?'u':'a');d.textContent=content;thread.appendChild(d);thread.scrollTop=thread.scrollHeight};
   const kcalOf=it=>it.per100.kcal*it.grams/100;
+  const norm=x=>{const it={name:String(x.name),grams:+x.grams||100,per100:x.per100,unit:null,count:null,_st:x._st||null,exact:!!x.exact,editG:false};
+    if(x.unit&&typeof x.unit==='object'&&x.unit.g>0){it.unit={label:x.unit.label||'piece',g:+x.unit.g};it.count=+x.count||Math.round(it.grams/it.unit.g*2)/2}
+    else if(typeof x.unit==='string'&&x.unit&&x.unit!=='null'&&x.count>0){it.unit={label:x.unit,g:Math.round(it.grams/x.count)};it.count=+x.count}
+    return it};
+  const step=it=>it.unit?0.5:it.grams>=200?25:10;
   const drawItems=()=>{if(!items.length){box.hidden=true;return}box.hidden=false;
-    box.innerHTML=`<div class="eyebrow">Items · adjust the grams</div>`+items.map((it,i)=>`<div class="pickrow"><input type="text" class="pn" value="${esc(it.name)}"><input type="number" class="pg" inputmode="numeric" value="${r0(it.grams)}"><span class="pk tnum">${fmt(kcalOf(it))}</span><button class="del" data-i="${i}" aria-label="Remove">×</button></div>`).join('')+`<div class="row between" style="margin-top:4px"><span class="small muted">Total <b class="tnum">${fmt(items.reduce((a,x)=>a+kcalOf(x),0))} kcal</b> · P <b>${r0(items.reduce((a,x)=>a+x.per100.p*x.grams/100,0))} g</b></span><button class="btn primary" id="spadd">Add all to ${$('#spmeal').value}</button></div>`;
-    box.querySelectorAll('.pg').forEach((inp,i)=>inp.oninput=()=>{items[i].grams=parseFloat(inp.value)||0;box.querySelectorAll('.pk')[i].textContent=fmt(kcalOf(items[i]))});
+    box.innerHTML=`<div class="eyebrow">What you ate · tap − / + to adjust</div>`+items.map((it,i)=>`<div class="pickrow"><input type="text" class="pn" value="${esc(it.name)}"><button class="del" data-i="${i}" aria-label="Remove">×</button>
+      <div class="qty">${it.editG?`<input type="text" inputmode="decimal" class="pg" value="${r0(it.grams)}" data-i="${i}" style="width:72px"> <span class="xs muted">g</span>`:`<button data-dec="${i}" aria-label="Less">−</button><b data-qt="${i}" title="Tap to type grams">${qtyText(it)}</b><button data-inc="${i}" aria-label="More">+</button>`}</div>
+      <div class="row" style="justify-content:flex-end;gap:6px"><span class="pk tnum">${fmt(kcalOf(it))}<span class="xs muted"> kcal</span></span><button class="btn sm ghost" data-exact="${i}" title="Replace with the exact supermarket product">${it.exact?'label':'est. · exact?'}</button></div>
+      <div class="exact-list" data-el="${i}" hidden></div></div>`).join('')+`<div class="row between" style="margin-top:6px"><span class="small muted">Total <b class="tnum">${fmt(items.reduce((a,x)=>a+kcalOf(x),0))} kcal</b> · P <b>${r0(items.reduce((a,x)=>a+x.per100.p*x.grams/100,0))} g</b></span><button class="btn primary" id="spadd">Add all to ${meal}</button></div><p class="xs muted" style="margin:6px 0 0">“est.” items are generic averages (the kind of values food tables carry). Tap “exact?” to swap in the real product with its label values.</p>`;
+    box.querySelectorAll('[data-dec]').forEach(b=>b.onclick=()=>{const it=items[+b.dataset.dec];const s=step(it);if(it.unit){it.count=Math.max(0.5,(it.count||1)-s);it.grams=Math.round(it.count*it.unit.g)}else it.grams=Math.max(5,it.grams-s);buzz(8);drawItems()});
+    box.querySelectorAll('[data-inc]').forEach(b=>b.onclick=()=>{const it=items[+b.dataset.inc];const s=step(it);if(it.unit){it.count=(it.count||1)+s;it.grams=Math.round(it.count*it.unit.g)}else it.grams+=s;buzz(8);drawItems()});
+    box.querySelectorAll('[data-qt]').forEach(b=>b.onclick=()=>{items[+b.dataset.qt].editG=true;drawItems();const inp=box.querySelector(`.pg[data-i="${b.dataset.qt}"]`);if(inp){inp.focus();inp.select()}});
+    box.querySelectorAll('.pg').forEach(inp=>{const done=()=>{const it=items[+inp.dataset.i];const v=numv(inp);if(v>0){it.grams=Math.round(v);if(it.unit)it.count=Math.round(it.grams/it.unit.g*2)/2}it.editG=false;drawItems()};inp.onblur=done;inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();inp.blur()}}});
     box.querySelectorAll('.pn').forEach((inp,i)=>inp.oninput=()=>{items[i].name=inp.value});
-    box.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{items.splice(+b.dataset.i,1);drawItems()});
-    $('#spadd').onclick=()=>{const m=$('#spmeal').value;let n=0;for(const it of items){if(!(it.grams>0))continue;day(cur).foods.push({uid:uid(),name:it.name,brand:'',barcode:null,grams:r0(it.grams),meal:m,per100:{kcal:+it.per100.kcal||0,p:+it.per100.p||0,c:+it.per100.c||0,f:+it.per100.f||0,fib:it.per100.fib==null?null:+it.per100.fib,sug:it.per100.sug==null?null:+it.per100.sug}});n++}save();closeSheet();buzz();toast(`Added ${n} item${n===1?'':'s'} to ${m}`);setTimeout(checkCelebrations,500);go('today')}};
+    box.querySelectorAll('[data-i].del').forEach(b=>b.onclick=()=>{items.splice(+b.dataset.i,1);drawItems()});
+    box.querySelectorAll('[data-exact]').forEach(b=>b.onclick=async()=>{const i=+b.dataset.exact;const it=items[i];const list=box.querySelector(`[data-el="${i}"]`);list.hidden=false;list.innerHTML='<div class="xs muted">Searching Open Food Facts…</div>';
+      try{const q=(it._st?dutchName(it._st):it.name).replace(/\(.*?\)/g,'').trim();const prods=(await offSearch(q,8)).slice(0,5);
+        if(!prods.length){list.innerHTML='<div class="xs muted">Nothing found. Scan the barcode instead, or keep the estimate.</div>';return}
+        list.innerHTML=prods.map((p,k)=>`<button class="res" data-pick="${k}" style="--sc:${scoreMeta(fitScore(p.per100)).color}"><div class="thumb">${p.img?`<img src="${esc(p.img)}" alt="">`:esc(p.name[0])}</div><div><div class="nm">${esc(p.name)}</div><div class="sub">${esc(p.brand||'')}${p.brand?' · ':''}${r0(p.per100.kcal)} kcal · P ${r1(p.per100.p)} /100 g</div></div><span class="score"><i></i>${fitScore(p.per100)??'–'}</span></button>`).join('');
+        list.querySelectorAll('[data-pick]').forEach(pb=>pb.onclick=()=>{const p=prods[+pb.dataset.pick];it.name=p.name;it.per100={...p.per100};it.exact=true;it.barcode=p.barcode;if(it.unit&&p.serving>0){it.unit.g=r0(p.serving);it.grams=Math.round(it.count*it.unit.g)}drawItems();toast('Swapped in the exact product')})}
+      catch(e){list.innerHTML='<div class="xs muted">Open Food Facts search is busy or rate-limited right now (10 searches a minute). Keep the estimate, try again in a minute, or scan the barcode.</div>'}});
+    $('#spadd').onclick=()=>{const m=meal;let n=0;for(const it of items){if(!(it.grams>0))continue;day(cur).foods.push({uid:uid(),name:it.name,brand:'',barcode:it.barcode||null,grams:r0(it.grams),meal:m,per100:{kcal:+it.per100.kcal||0,p:+it.per100.p||0,c:+it.per100.c||0,f:+it.per100.f||0,fib:it.per100.fib==null?null:+it.per100.fib,sug:it.per100.sug==null?null:+it.per100.sug}});n++}save();closeSheet();buzz();toast(`Added ${n} item${n===1?'':'s'} to ${m}`);setTimeout(checkCelebrations,500);go('today')}};
   const send=async text=>{text=(text||'').trim();if(!text)return;push('user',text);$('#spsend').disabled=true;$('#spstatus').textContent='Working it out…';
-    try{const r=await parseMeal(conv);if(Array.isArray(r.items)&&r.items.length)items=r.items.filter(x=>x&&x.name&&x.per100).map(x=>({name:String(x.name),grams:+x.grams||100,per100:x.per100}));
+    try{const r=await parseMeal(conv);if(Array.isArray(r.items)&&r.items.length)items=r.items.filter(x=>x&&x.name&&x.per100).map(norm);
       push('assistant',(r.reply||'')+(r.question?' '+r.question:''));drawItems();if(r.question){$('#spin').placeholder='Answer here…';$('#spin').focus()}else if(items.length){$('#spin').placeholder='Correct anything: “beets were much less”, “no mayo”, “chicken 60 g”'}}
     catch(e){push('assistant','I couldn’t process that ('+(e&&e.message||e)+'). Try again, or add it via Search.')}
     $('#spsend').disabled=false;$('#spstatus').textContent=''};
   $('#spsend').onclick=()=>{send($('#spin').value);$('#spin').value=''};
   $('#spin').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#spsend').click()}};
   const mic=$('#spmic');if(mic)mic.onclick=()=>startMic(mic,t=>{$('#spin').value='';send(t)},t=>{$('#spin').value=t});
-  if(preset&&Array.isArray(preset.items)){items=preset.items.filter(x=>x&&x.name&&x.per100).map(x=>({name:String(x.name),grams:+x.grams||100,per100:x.per100}));push('assistant',(preset.note||'Meal received.')+' Check the amounts, change anything, then add it.');drawItems();$('#spin').placeholder='Correct anything: “beets were much less”, “no mayo”, “chicken 60 g”';conv.length=0;conv.push({role:'user',content:items.map(i=>`${i.grams} g ${i.name}`).join(', ')})}
+  if(preset&&Array.isArray(preset.items)){items=preset.items.filter(x=>x&&x.name&&x.per100).map(norm);push('assistant',(preset.note||'Meal received.')+' Check the amounts, change anything, then add it.');drawItems();$('#spin').placeholder='Correct anything: “beets were much less”, “no mayo”, “chicken 60 g”';conv.length=0;conv.push({role:'user',content:items.map(i=>`${i.grams} g ${i.name}`).join(', ')})}
 }
 function importFromLink(){try{const m=location.hash.match(/#add=(.+)$/);if(!m)return;const data=JSON.parse(decodeURIComponent(m[1]));history.replaceState(null,'',location.pathname+location.search);if(!S.profile){toast('Set up your plan first, then open the link again');return}setTimeout(()=>openSpeak(data.meal||'Lunch',data),400)}catch(e){toast('That meal link could not be read')}}
 
