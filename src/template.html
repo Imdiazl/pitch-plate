@@ -115,6 +115,11 @@ main{padding:12px 16px 0;display:flex;flex-direction:column;gap:18px}
 .slimtxt b{font-family:var(--display);font-size:16px;font-weight:700}
 .slimtxt .xs{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .datenav .nb .wchip{width:auto;padding:0 12px;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.03em;color:var(--accent-ink);background:var(--accent-soft);border-color:transparent}
+.gline{text-align:center;font-size:12.5px;color:var(--ink2);margin-top:-2px}
+.gline b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.strip.float{position:fixed;top:calc(6px + env(safe-area-inset-top));left:10px;right:10px;max-width:520px;margin:0 auto;transform:translateY(-130%);opacity:0;transition:transform .25s ease,opacity .25s ease;pointer-events:none}
+.strip.float.show{transform:none;opacity:1;pointer-events:auto}
+@media (prefers-reduced-motion:reduce){.strip.float{transition:none}}
 /* game board */
 .board .top3{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:center}
 .board .sc{display:flex;flex-direction:column;line-height:1}
@@ -223,6 +228,8 @@ label.f{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--
 .seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(16,36,29,.14)}
 .mealseg button{font-size:13px;padding:10px 4px}
 .mealseg button.on{background:var(--accent);color:var(--on-accent);box-shadow:none}
+.verdict{border-left:3px solid var(--vc);background:var(--surface2);background:color-mix(in srgb,var(--vc) 10%,var(--surface));padding:10px 12px;border-radius:0 12px 12px 0;font-size:14px;line-height:1.45}
+.verdict b{color:var(--vc);font-weight:700}
 .pane[hidden]{display:none}
 .pane{display:flex;flex-direction:column;gap:12px}
 /* scanner */
@@ -616,8 +623,8 @@ function go(v){
 function render(){
   applyTheme();
   if(!S.profile){$('#strip').hidden=true;$('#lvlchip').hidden=true;if(view!=='plan'){view='plan';$$('.view').forEach(s=>s.hidden=s.id!=='v-plan');$$('.tabbar button').forEach(b=>b.classList.toggle('on',b.dataset.view==='plan'))}renderPlan();return}
-  renderStrip();
-  const L=levelInfo(totalXP());const lc=$('#lvlchip');lc.hidden=false;lc.innerHTML=`Lv <b>${L.n}</b> · ${L.title}`;lc.onclick=()=>go('progress');
+  renderStrip();$('#lvlchip').hidden=true;
+  const stripEl=$('#strip');if(view==='today'){stripEl.classList.add('float');stripEl.classList.remove('show')}else stripEl.classList.remove('float','show');
   if(view==='today')renderToday();else if(view==='add')renderAdd();else if(view==='progress')renderProgress();else if(view==='plan')renderPlan();
 }
 let toastT;function toast(m,action){const t=$('#toast');t.innerHTML=esc(m)+(action?` <button class="tact">${esc(action.label)}</button>`:'');t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,action?6000:2400);if(action)t.querySelector('.tact').onclick=()=>{t.hidden=true;action.fn()}}
@@ -670,51 +677,68 @@ function renderToday(){
   const wEntry=latestWeightEntry();const dd=parseYmd(cur);
   const parts=scoreParts(cur),score=parts.reduce((a,x)=>a+x.earned,0),xp=totalXP(),L=levelInfo(xp),st=streak();
   const flame='<svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor"><path d="M12 2c1 4 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5 0 2 1 3 2 3 0-3-1-5 1-8.5z"/></svg>';
+  const dayTag=D.ex.some(e=>e.id.startsWith('fb'))?' · football day':D.ex.some(e=>e.id==='gym'||e.id==='hiit')?' · gym day':'';
+  const wTag=D.weight?` · ${D.weight} kg`:'';
   let html=`
-  <div class="datenav"><div class="dl">${niceDate(cur)}<small>${DOW[dd.getDay()]} ${dd.getDate()} ${MON[dd.getMonth()]}${D.ex.some(e=>e.id.startsWith('fb'))?' · football day':D.ex.some(e=>e.id==='gym'||e.id==='hiit')?' · gym day':''}</small></div><div class="nb"><button class="wchip" id="act-weigh" title="Weigh in">${D.weight?D.weight+' kg':wEntry?wEntry.kg+' kg':'weigh in'}</button><button id="dprev" aria-label="Previous day">‹</button>${cur!==ymd(new Date())?'<button class="today" id="dtoday">Today</button>':''}<button id="dnext" aria-label="Next day">›</button></div></div>
-  <div class="card lift glow">
+  <div class="datenav"><div class="dl">${niceDate(cur)}<small>${DOW[dd.getDay()]} ${dd.getDate()} ${MON[dd.getMonth()]}${wTag}${dayTag}</small></div><div class="nb"><button id="daymenu" aria-label="More for this day">⋯</button><button id="dprev" aria-label="Previous day">‹</button>${cur!==ymd(new Date())?'<button class="today" id="dtoday">Today</button>':''}<button id="dnext" aria-label="Next day">›</button></div></div>
+  <div class="card lift glow" id="gaugecard">
     <div class="gauge">${gaugeSvg(pct,over)}<div class="gc"><span class="num ${over?'over':''}">${fmt(Math.abs(left))}</span><span class="l">${over?'kcal over':'kcal left'}</span></div></div>
-    <div class="gstats"><div class="gstat"><div class="v">${fmt(t.kcal)}</div><div class="k">eaten</div></div><div class="gstat"><div class="v">${fmt(T.kcal)}</div><div class="k">target</div></div><div class="gstat"><div class="v" style="color:${T.ex?'var(--accent-ink)':'var(--ink2)'}">${T.ex?'+'+fmt(T.ex*S.profile.eatBack/100):'0'}</div><div class="k">from training</div></div></div>
-    <div class="rings">${mring('p','Protein','var(--p)',t.p,T.p,parts[1])}${mring('fib','Fibre','var(--fib)',t.fib,T.fib,parts[2])}${mring('c','Carbs','var(--c)',t.c,T.c)}${mring('f','Fat','var(--f)',t.f,T.f)}</div>
+    <div class="gline"><b>${fmt(t.kcal)}</b> eaten · <b>${fmt(T.kcal)}</b> target${T.ex?` · <b style="color:var(--accent-ink)">+${fmt(T.ex*S.profile.eatBack/100)}</b> from training`:''}</div>
+    <div class="rings">${mring('p','Protein','var(--p)',t.p,T.p)}${mring('fib','Fibre','var(--fib)',t.fib,T.fib)}${mring('c','Carbs','var(--c)',t.c,T.c)}${mring('f','Fat','var(--f)',t.f,T.f)}</div>
   </div>
   <div class="card prompt">
-    <div class="eyebrow">Tell me</div>
-    <textarea id="homein" rows="2" enterkeyhint="send" placeholder="What did you have? “smashed potatoes 250 g and ground chicken 200 g” · or “ran 5 km” · or “97.4 kg” · or ask “what should I eat?”"></textarea>
-    <div class="row" style="margin-top:8px"><button class="btn micbtn ${micSupported()?'':'hidden'}" id="homemic" aria-label="Speak">${MIC}</button><label class="btn micbtn" aria-label="Photo of your plate" title="Photo of your plate"><input type="file" id="homephoto" accept="image/*" capture="environment" hidden>${CAM}</label><span class="xs muted" style="flex:1;line-height:1.3">Food, training, weight or a question. ${coachMode()==='rules'?'Offline mode; add your API key on Journey for Claude.':'Claude is on.'}</span><button class="btn primary" id="homego">Go</button></div>
+    <textarea id="homein" rows="2" enterkeyhint="send" placeholder="What did you have? Or “ran 5 km”, “97.4 kg”, “what should I eat?”"></textarea>
+    <div class="row" style="margin-top:8px"><button class="btn micbtn" id="homemic" aria-label="Speak">${MIC}</button><label class="btn micbtn" aria-label="Photo of your plate" title="Photo of your plate"><input type="file" id="homephoto" accept="image/*" capture="environment" hidden>${CAM}</label><span style="flex:1"></span><button class="btn primary" id="homego">Go</button></div>
   </div>`;
-  html+=`<div class="card meal diary"><div class="mh"><h3>Eaten today</h3><span class="kc">${D.foods.length?fmt(t.kcal)+' kcal · P '+r0(t.p)+' g · fibre '+r0(t.fib)+' g':'nothing logged yet'}</span></div>`;
+  html+=`<div class="card meal diary"><div class="mh"><h3>Eaten today</h3><span class="kc">${D.foods.length?fmt(t.kcal)+' kcal · P '+r0(t.p)+' g':''}</span></div>`;
+  if(!D.foods.length&&!D.ex.length)html+=`<div class="item empty">Nothing logged yet. Tell me what you had, above.</div>`;
   for(const m of MEALS){
-    const items=D.foods.filter(f=>f.meal===m);const kc=items.reduce((a,f)=>a+f.per100.kcal*f.grams/100,0);
-    if(!items.length&&m==='Snacks'&&!D.foods.length)continue;
-    html+=`<div class="msec"><div class="msh"><b>${m}</b><span class="tnum muted small">${items.length?fmt(kc)+' kcal':''}</span><span class="msact"><button class="ib" data-saymeal="${m}" aria-label="Say what you ate for ${m.toLowerCase()}">${MIC}</button><button class="ib" data-addmeal="${m}" aria-label="Search and add to ${m.toLowerCase()}">+</button></span></div>`;
-    if(!items.length)html+=`<div class="item empty">Nothing yet.</div>`;
+    const items=D.foods.filter(f=>f.meal===m);if(!items.length)continue;const kc=items.reduce((a,f)=>a+f.per100.kcal*f.grams/100,0);
+    html+=`<div class="msec"><div class="msh"><b>${m}</b><span class="tnum muted small">${fmt(kc)} kcal</span></div>`;
     for(const f of items){const sc=fitScore(f.per100),sm=scoreMeta(sc);const g=f.grams/100;
-      html+=`<div class="item" style="--sc:${sm.color}"><span class="dot" title="${sm.label}"></span><div class="main" data-edit="${f.uid}" role="button" tabindex="0"><div class="nm">${esc(f.name)}</div><div class="sub"><i>${f.grams} g</i><i style="color:var(--p)">P ${r0(f.per100.p*g)}</i><i style="color:var(--fib)">Fib ${r0((f.per100.fib||0)*g)}</i><i style="color:var(--c)">C ${r0(f.per100.c*g)}</i><i style="color:var(--f)">F ${r0(f.per100.f*g)}</i></div></div><span class="kc">${fmt(f.per100.kcal*g)}</span><button class="del" data-del="${f.uid}" aria-label="Remove">×</button></div>`}
+      html+=`<div class="item" style="--sc:${sm.color}"><span class="dot" title="${sm.label}"></span><div class="main" data-edit="${f.uid}" role="button" tabindex="0"><div class="nm">${esc(f.name)}</div><div class="sub"><i>${esc(f.qty||f.grams+' g')}</i><i style="color:var(--p)">P ${r0(f.per100.p*g)}</i><i style="color:var(--fib)">Fib ${r0((f.per100.fib||0)*g)}</i></div></div><span class="kc">${fmt(f.per100.kcal*g)}</span><button class="del" data-del="${f.uid}" aria-label="Remove">×</button></div>`}
     html+=`</div>`;
   }
-  const exMin=D.ex.reduce((a,e)=>a+e.min,0);
-  html+=`<div class="msec"><div class="msh"><b>Training</b><span class="tnum muted small">${D.ex.length?exMin+' min · −'+fmt(T.ex)+' kcal':''}</span><span class="msact"><button class="ib" id="addex" aria-label="Log training">+</button></span></div>`;
-  if(!D.ex.length)html+=`<div class="item empty">Nothing yet. Say “ran 5 km” or “gym 45 min” above.</div>`;
-  for(const e of D.ex)html+=`<div class="item" style="--sc:${e.id==='sauna'?'var(--ink2)':'var(--accent)'}"><span class="dot"></span><div class="main" data-editex="${e.uid}" role="button" tabindex="0"><div class="nm">${esc(e.name)}</div><div class="sub"><i>${e.min} min</i>${e.id==='sauna'?'<i>recovery</i>':''}${(e.sets||[]).map(x=>`<i>${esc(x.n)} ${x.sets||'?'}×${x.reps||'?'}${x.kg?' @ '+x.kg+' kg':''}</i>`).join('')}</div></div><span class="kc">${e.id==='sauna'?'–':fmt(e.kcal)}</span><button class="del" data-delex="${e.uid}" aria-label="Remove">×</button></div>`;
-  html+=`</div><div class="addrow"><button class="btn sm ghost" id="copyy">Copy yesterday</button>${D.foods.length?`<a class="btn sm ghost" target="_blank" rel="noopener" href="${gcalFoodUrl(cur)}">Save day to calendar</a>`:''}</div></div>`;
+  if(D.ex.length){
+    const exMin=D.ex.reduce((a,e)=>a+e.min,0);
+    html+=`<div class="msec"><div class="msh"><b>Training</b><span class="tnum muted small">${exMin} min · −${fmt(T.ex)} kcal</span></div>`;
+    for(const e of D.ex)html+=`<div class="item" style="--sc:${e.id==='sauna'?'var(--ink2)':'var(--accent)'}"><span class="dot"></span><div class="main" data-editex="${e.uid}" role="button" tabindex="0"><div class="nm">${esc(e.name)}</div><div class="sub"><i>${e.min} min</i>${e.id==='sauna'?'<i>recovery</i>':''}${(e.sets||[]).map(x=>`<i>${esc(x.n)} ${x.sets||'?'}×${x.reps||'?'}${x.kg?' @ '+x.kg+' kg':''}</i>`).join('')}</div></div><span class="kc">${e.id==='sauna'?'–':fmt(e.kcal)}</span><button class="del" data-delex="${e.uid}" aria-label="Remove">×</button></div>`;
+    html+=`</div>`;
+  }
+  html+=`<div class="addrow"><button class="btn sm" id="addfood">+ Add food</button><button class="btn sm" id="addex">+ Training</button></div></div>`;
   html+=`<button class="card slim" id="slimscore"><span class="num" style="font-size:26px">${score}<small class="muted" style="font-family:var(--body);font-weight:500;font-size:12px">/100</small></span><span class="slimtxt"><b>Lv ${L.n} · ${L.title}</b><span class="xs muted">${L.to?`${fmt(L.to-xp)} XP to ${L.nextTitle}`:'Max level'} · ${scoreHint(cur).replace(/<[^>]+>/g,'').slice(0,60)}</span></span><span class="streak">${flame}${st}</span></button>`;
   const el=$('#v-today');el.innerHTML=html;
   $('#dprev').onclick=()=>{cur=addDays(cur,-1);render()};$('#dnext').onclick=()=>{cur=addDays(cur,1);render()};const dt=$('#dtoday');if(dt)dt.onclick=()=>{cur=ymd(new Date());render()};
+  $('#daymenu').onclick=openDayMenu;
   el.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>removeFood(b.dataset.del));
   el.querySelectorAll('[data-delex]').forEach(b=>b.onclick=()=>removeEx(b.dataset.delex));
   el.querySelectorAll('[data-edit]').forEach(x=>x.onclick=()=>openEditFood(x.dataset.edit));
   el.querySelectorAll('[data-editex]').forEach(x=>x.onclick=()=>openEditEx(x.dataset.editex));
-  el.querySelectorAll('[data-addmeal]').forEach(b=>b.onclick=()=>{pendingMeal=b.dataset.addmeal;go('add')});
-  el.querySelectorAll('[data-saymeal]').forEach(b=>b.onclick=()=>openSpeak(b.dataset.saymeal));
-  $('#addex').onclick=()=>openExercise();$('#act-weigh').onclick=openWeigh;
+  $('#addfood').onclick=()=>{pendingMeal=null;go('add')};$('#addex').onclick=()=>openExercise();
   $('#slimscore').onclick=()=>go('progress');
   el.querySelectorAll('.mring').forEach(m=>{const act=()=>{const k=m.dataset.m;if(k==='p'||k==='fib')openPicks(k);else{pane='search';go('add');const q=k==='c'?'volkoren':'kwark';$('#q').value=q;doSearch(q)}};m.onclick=act;m.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();act()}}});
-  $('#copyy').onclick=()=>{const prevDate=addDays(cur,-1);const p=S.days[prevDate];if(!p||!p.foods.length){toast('Nothing logged on '+niceDate(prevDate));return}for(const f of p.foods)D.foods.push({...f,uid:uid()});save();render();toast('Copied '+p.foods.length+' items')};
   /* the one box */
   const go1=()=>{const txt=$('#homein').value.trim();if(!txt)return;$('#homein').value='';routeInput(txt)};
   $('#homego').onclick=go1;$('#homein').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();go1()}};
-  const hm=$('#homemic');if(hm)hm.onclick=()=>startMic(hm,t=>{$('#homein').value='';routeInput(t)},t=>{$('#homein').value=t});
+  const hm=$('#homemic');hm.onclick=()=>startMic(hm,t=>{$('#homein').value='';routeInput(t)},t=>{$('#homein').value=t},$('#homein'));
   $('#homephoto').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)openSpeak(null,{file:f})};
+  setupStripObserver();
+}
+let stripTick=false;
+function stripCheck(){const g=$('#gaugecard'),st=$('#strip');if(!g||!st||view!=='today'||!st.classList.contains('float'))return;st.classList.toggle('show',g.getBoundingClientRect().bottom<0)}
+function setupStripObserver(){stripCheck();if(!setupStripObserver.bound){setupStripObserver.bound=true;window.addEventListener('scroll',stripCheck,{passive:true})}}
+function openDayMenu(){
+  const D=day(cur),w=latestWeightEntry(),prev=S.days[addDays(cur,-1)];
+  openSheet(`<h2>${niceDate(cur)}</h2><div class="opts">
+    <button class="opt" id="dm-weigh"><div><b>Weigh in</b><span>${D.weight?`Today: ${D.weight} kg`:w?`Last: ${w.kg} kg on ${niceDate(w.date)}`:'No weigh-in yet'}</span></div></button>
+    <button class="opt" id="dm-copy"><div><b>Copy yesterday's food</b><span>${prev&&prev.foods.length?`${prev.foods.length} items from ${niceDate(addDays(cur,-1))}`:'Nothing logged yesterday'}</span></div></button>
+    ${D.foods.length?`<a class="opt" target="_blank" rel="noopener" href="${gcalFoodUrl(cur)}"><div><b>Save this day to Google Calendar</b><span>Food, training and weight as an all-day note</span></div></a>`:''}
+    <button class="opt" id="dm-coach"><div><b>Ask the coach</b><span>How am I doing, what should I eat</span></div></button>
+  </div><button class="btn ghost wide" id="dm-close" style="margin-top:4px">Close</button>`);
+  $('#dm-weigh').onclick=()=>{closeSheet();openWeigh()};
+  $('#dm-copy').onclick=()=>{if(!prev||!prev.foods.length){toast('Nothing logged yesterday');return}for(const f of prev.foods)D.foods.push({...f,uid:uid()});save();closeSheet();render();toast('Copied '+prev.foods.length+' items')};
+  $('#dm-coach').onclick=()=>{closeSheet();openCoach()};
+  $('#dm-close').onclick=closeSheet;
 }
 /* decide what a sentence is: weight, training, question, or food */
 function routeInput(text){
@@ -741,7 +765,7 @@ function openEditFood(id){const f=day(cur).foods.find(x=>x.uid===id);if(!f)retur
     <div class="row"><button class="btn primary wide" id="esave">Save</button><button class="btn danger" id="edel">Delete</button></div>`);
   const upd=()=>{const g=(parseFloat($('#eg').value)||0)/100;$('#ek').textContent=fmt(n.kcal*g);$('#emac').innerHTML=`<span>P <b>${r0(n.p*g)}</b></span><span>Fib <b>${n.fib==null?'?':r0(n.fib*g)}</b></span><span>C <b>${r0(n.c*g)}</b></span><span>Fat <b>${r0(n.f*g)}</b></span>`};$('#eg').oninput=upd;upd();
   let eMeal=f.meal;$$('#em button').forEach(b=>b.onclick=()=>{eMeal=b.dataset.meal;$$('#em button').forEach(x=>x.classList.toggle('on',x===b))});
-  $('#esave').onclick=()=>{const g=numv($('#eg'));if(!(g>0)){toast('Enter an amount');return}f.grams=g;f.meal=eMeal;save();closeSheet();render();toast('Updated')};
+  $('#esave').onclick=()=>{const g=numv($('#eg'));if(!(g>0)){toast('Enter an amount');return}if(f.grams!==g)f.qty=null;f.grams=g;f.meal=eMeal;save();closeSheet();render();toast('Updated')};
   $('#edel').onclick=()=>{closeSheet();removeFood(id)};}
 function openEditEx(id){const e=day(cur).ex.find(x=>x.uid===id);if(!e)return;
   openSheet(`<h2>${esc(e.name)}</h2><div class="grid2"><label class="f">Name<input type="text" id="xn" value="${esc(e.name)}"></label><label class="f">Minutes<input type="number" id="xm" inputmode="numeric" value="${e.min}"></label></div>
@@ -784,6 +808,33 @@ function renderSaved(){
 }
 {{search}}
 /* product sheet */
+function verdictFor(p,g){
+  const n=p.per100;if(!(n.kcal>0))return{tier:'No data',text:'This product has no nutrition data. Add it from the label to be sure.',color:'var(--ink2)'};
+  const sc=fitScore(n)??0,T=targetsFor(cur),t=totals(cur);const left=T.kcal-t.kcal,pLeft=T.p-t.p,fibLeft=T.fib-t.fib;
+  const kcal=n.kcal*g/100,prot=n.p*g/100;const pDen=n.p/n.kcal*100,fatPct=n.f*9/n.kcal,fibDen=(n.fib||0)/n.kcal*100;
+  const neg=[],pos=[];
+  if(fatPct>0.4)neg.push(`${r0(fatPct*100)}% of its calories are fat`);
+  if(pDen<4)neg.push('almost no protein');else if(pDen<7)neg.push('thin on protein');
+  if((n.sug||0)>12)neg.push(`${r1(n.sug)} g sugar per 100 g`);
+  if(n.fib!=null&&n.fib<1.5&&n.kcal>150&&pDen<8)neg.push('no fibre');
+  if(pDen>=8)pos.push(`${r1(pDen)} g protein per 100 kcal`);
+  if(fibDen>=2.5)pos.push(`${r1(n.fib)} g fibre per 100 g`);
+  if(fatPct<=0.25)pos.push('low fat');
+  let tier,color;if(sc>=75){tier='Good pick.';color='var(--good)'}else if(sc>=55){tier='Fine.';color='var(--ok)'}else if(sc>=35){tier='Not a great option.';color='var(--warn)'}else{tier='Bad option.';color='var(--bad)'}
+  let budget;if(left<=0)budget=`You’re already ${fmt(-left)} kcal over today.`;else if(kcal>left)budget=`${g} g is ${fmt(kcal)} kcal, more than the ${fmt(left)} you have left.`;else if(kcal>left*0.5)budget=`${g} g takes ${fmt(kcal)} of your ${fmt(left)} kcal left.`;else budget=`${g} g is ${fmt(kcal)} kcal, fits in your ${fmt(left)} left.`;
+  let tip='';if(sc<55){if(pLeft>20)tip='You still need protein: kwark, skyr, eggs or chicken do more for you.';else if(fibLeft>10)tip='Fibre is what you’re short on: beans, lentils or veg instead.';else if(left>0)tip='If you want it, keep it small and stop there.'}
+  else if(sc>=75&&pLeft>20)tip=`Good for your protein gap: this gives ${r0(prot)} g.`;
+  const why=neg.length?neg.slice(0,2).join(', ')+'.':pos.length?pos.slice(0,2).join(', ')+'.':'';
+  return{tier,color,text:`${why} ${budget} ${tip}`.replace(/\s+/g,' ').trim()};
+}
+async function claudeVerdict(p,g){
+  const n=p.per100;const sys=`You are the blunt coach inside Pitch & Plate. Ivan just scanned a product and is deciding whether to eat it. Answer in at most two short sentences: straight verdict, the one reason that matters, and what to do instead if it is a bad idea. Use today's numbers below. No disclaimers, no markdown.`;
+  const user=`PRODUCT: ${p.name}${p.brand?' ('+p.brand+')':''}. Per 100 g: ${r0(n.kcal)} kcal, protein ${r1(n.p)} g, carbs ${r1(n.c)} g, fat ${r1(n.f)} g, fibre ${n.fib==null?'?':r1(n.fib)} g, sugar ${n.sug==null?'?':r1(n.sug)} g. Portion he is considering: ${g} g.\n\n`+coachContext();
+  const sm=await getSample();
+  if(sm){const r=await sm([{role:'user',content:sys+'\n\n'+user}],{modelTier:'default',cache:false});return (r.text||'').trim()}
+  if(S.settings.apiKey)return (await askClaudeAPI(S.settings.apiKey,sys,[{role:'user',content:user}])).trim();
+  return null;
+}
 function showProduct(p){
   const sc=fitScore(p.per100),sm=scoreMeta(sc),rs=reasons(p.per100);
   const isFav=S.favs.some(f=>(f.barcode&&f.barcode===p.barcode)||f.name===p.name);
@@ -792,6 +843,7 @@ function showProduct(p){
   const title=p.src==='staple'?enName(p):p.name;const eyebrow=p.src==='staple'?(dutchName(p)!==title?dutchName(p)+' · generic, per 100 g':'Generic, per 100 g'):(p.brand||'Product');
   openSheet(`
     <div class="row between"><div><div class="eyebrow">${esc(eyebrow)}${p.qty?' · '+esc(p.qty):''}</div><h2>${esc(title)}</h2></div><button class="btn sm ${isFav?'primary':'ghost'}" id="fav" aria-pressed="${isFav}">${isFav?'★ Saved':'☆ Save'}</button></div>
+    <div class="verdict" id="verdict" style="--vc:${verdictFor(p,def).color}"><b id="vtier">${verdictFor(p,def).tier}</b> <span id="vtext">${esc(verdictFor(p,def).text)}</span></div>
     <div class="row" style="gap:8px;flex-wrap:wrap"><span class="pill sc" style="--sc:${sm.color}"><i style="width:8px;height:8px;border-radius:50%;background:${sm.color};display:inline-block"></i>Fit ${sc??'–'} · ${sm.label}</span>${p.nutri&&'abcde'.includes(p.nutri)?`<span class="pill">Nutri-Score <span class="ns ${p.nutri}">${p.nutri}</span></span>`:''}</div>
     <ul class="reasons">${rs.map(([c,t])=>`<li style="--rc:${RC[c]}">${t}</li>`).join('')}</ul>
     <div class="eyebrow">Per 100 g</div>
@@ -802,8 +854,11 @@ function showProduct(p){
     <div class="preview"><div><span class="num" id="pv-kcal">0</span> <span class="small muted">kcal</span></div><div class="m" id="pv-m"></div></div>
     <div class="row"><button class="btn primary wide" id="addit">Add to ${guessMeal().toLowerCase()}${niceDate(cur).toLowerCase()==='today'?'':' · '+niceDate(cur)}</button><button class="btn ghost" id="cancel">Cancel</button></div>`);
   let selMeal=guessMeal();$$('#meal button').forEach(b=>b.onclick=()=>{selMeal=b.dataset.meal;$$('#meal button').forEach(x=>x.classList.toggle('on',x===b));$('#addit').textContent=`Add to ${selMeal.toLowerCase()}${niceDate(cur).toLowerCase()==='today'?'':' · '+niceDate(cur)}`;buzz(8)});
-  const upd=()=>{const g=(numv($('#grams'))||0)/100;$('#pv-kcal').textContent=fmt(n.kcal*g);$('#pv-m').innerHTML=`<span>P <b>${r0(n.p*g)}</b></span><span>Fib <b>${n.fib==null?'?':r0(n.fib*g)}</b></span><span>C <b>${r0(n.c*g)}</b></span><span>Fat <b>${r0(n.f*g)}</b></span>`;$$('#gchips button').forEach(b=>b.classList.toggle('on',+b.dataset.g===numv($('#grams'))))};
+  let claudeSaid=false;
+  const upd=()=>{const g=(numv($('#grams'))||0)/100;if(!claudeSaid){const v=verdictFor(p,Math.round(g*100)||def);$('#verdict').style.setProperty('--vc',v.color);$('#vtier').textContent=v.tier;$('#vtext').textContent=v.text}$('#pv-kcal').textContent=fmt(n.kcal*g);$('#pv-m').innerHTML=`<span>P <b>${r0(n.p*g)}</b></span><span>Fib <b>${n.fib==null?'?':r0(n.fib*g)}</b></span><span>C <b>${r0(n.c*g)}</b></span><span>Fat <b>${r0(n.f*g)}</b></span>`;$$('#gchips button').forEach(b=>b.classList.toggle('on',+b.dataset.g===numv($('#grams'))))};
   $('#grams').oninput=upd;upd();
+  if(coachMode()!=='rules'){claudeVerdict(p,def).then(txt=>{if(!txt||!$('#vtext')||$('#panel').dataset.pid!==p._id)return;claudeSaid=true;$('#vtext').textContent=txt;$('#vtier').textContent='Coach:'}).catch(()=>{})}
+  $('#panel').dataset.pid=p._id||(p._id=uid());
   $$('#gchips button').forEach(b=>b.onclick=()=>{$('#grams').value=b.dataset.g;upd()});
   $('#cancel').onclick=closeSheet;
   $('#fav').onclick=()=>{if(isFav){S.favs=S.favs.filter(f=>!((f.barcode&&f.barcode===p.barcode)||f.name===p.name))}else S.favs.unshift(strip(p));save();showProduct(p)};
@@ -875,15 +930,24 @@ async function parsePhoto(dataUrl){
   throw new Error('needs Claude');
 }
 function micSupported(){return !!(window.SpeechRecognition||window.webkitSpeechRecognition)}
-function startMic(btn,onFinal,onInterim){
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){toast('Voice input is not available in this browser. Chrome works best.');return null}
+function startMic(btn,onFinal,onInterim,inputEl){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){if(inputEl){inputEl.focus()}toast('No built-in voice in this browser. Use the mic key on your keyboard, it works just the same.');return null}
   if(btn._rec){try{btn._rec.stop()}catch(e){}return null}
-  const r=new SR();r.lang=S.settings.lang||'en-GB';r.interimResults=true;r.continuous=false;r.maxAlternatives=1;let final='';
+  const r=new SR();r.lang=S.settings.lang||'en-GB';r.interimResults=true;r.continuous=false;r.maxAlternatives=1;let final='',lastText='',gotResult=false;
   btn._rec=r;btn.classList.add('listening');
-  r.onresult=e=>{let interim='';for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript;if(e.results[i].isFinal)final+=t;else interim+=t}if(onInterim)onInterim(final||interim)};
-  r.onend=()=>{btn._rec=null;btn.classList.remove('listening');if(final.trim())onFinal(final.trim())};
-  r.onerror=e=>{btn._rec=null;btn.classList.remove('listening');if(e.error==='not-allowed')toast('Microphone blocked. Allow it for this site in Chrome.');else if(e.error!=='aborted'&&e.error!=='no-speech')toast('Voice error: '+e.error)};
-  try{r.start()}catch(e){btn._rec=null;btn.classList.remove('listening')}
+  const ph=inputEl?inputEl.placeholder:'';if(inputEl)inputEl.placeholder='Listening… speak now';
+  const done=()=>{btn._rec=null;btn.classList.remove('listening');if(inputEl)inputEl.placeholder=ph};
+  r.onstart=()=>{buzz(15)};
+  r.onresult=e=>{gotResult=true;let interim='';for(let i=e.resultIndex;i<e.results.length;i++){const tx=e.results[i][0].transcript;if(e.results[i].isFinal)final+=tx;else interim+=tx}lastText=(final||interim);if(onInterim)onInterim(lastText)};
+  r.onend=()=>{done();const txt=(final||lastText).trim();if(txt)onFinal(txt);else if(!gotResult)toast('Didn’t hear anything. Tap the mic, then speak straight away.')};
+  r.onerror=e=>{done();const k=e.error;
+    if(k==='not-allowed'||k==='service-not-allowed')toast('Microphone blocked. In Chrome tap the lock icon → Permissions → Microphone → Allow.');
+    else if(k==='no-speech')toast('Didn’t hear anything. Tap the mic, then speak straight away.');
+    else if(k==='network')toast('Voice needs internet (it uses Google speech). Or use the mic key on your keyboard.');
+    else if(k==='audio-capture')toast('No microphone found.');
+    else if(k!=='aborted')toast('Voice error: '+k+'. Use the mic key on your keyboard instead.')};
+  try{r.start()}catch(err){done();toast('Could not start voice. Use the mic key on your keyboard.')}
   return r;
 }
 function langChips(){return `<div class="chips" style="gap:4px"><button data-lang="en-GB" class="${(S.settings.lang||'en-GB')==='en-GB'?'on':''}">EN</button><button data-lang="nl-NL" class="${S.settings.lang==='nl-NL'?'on':''}">NL</button></div>`}
@@ -948,7 +1012,7 @@ function openExercise(prefill){
   const w=latestWeight();let sel=EX.find(e=>e.id==='other'),met=sel.met;
   openSheet(`<h2>Log training · ${niceDate(cur)}</h2>
     <label class="f">Describe it, or tap the mic<textarea id="exdesc" rows="2" placeholder="e.g. e-bike 10 km · bakfiets 25 min · ran 5 km in 28 min · football match · gym 45 min · walked 6 km">${esc(prefill||'')}</textarea></label>
-    <div class="row"><button class="btn primary" id="exparse">Work it out</button><button class="btn micbtn" id="exmic" aria-label="Speak" ${micSupported()?'':'hidden'}>${MIC}</button>${langChips()}<span class="status" id="exstatus" style="flex:1"></span></div>
+    <div class="row"><button class="btn primary" id="exparse">Work it out</button><button class="btn micbtn" id="exmic" aria-label="Speak">${MIC}</button>${langChips()}<span class="status" id="exstatus" style="flex:1"></span></div>
     <div class="chips" id="exchips">${EX.map(e=>`<button data-ex="${e.id}">${e.name}</button>`).join('')}</div>
     <div id="exres" hidden style="display:flex;flex-direction:column;gap:10px">
       <div class="preview"><div><span class="num" id="exbig">0</span> <span class="small muted">kcal</span></div><div class="m" id="exmeta"></div></div>
@@ -979,7 +1043,7 @@ function openExercise(prefill){
   const show=(name,min,m,id)=>{sel=EX.find(e=>e.id===id)||EX.find(e=>e.id==='other');met=m;$('#exres').hidden=false;$('#exname').value=name;$('#exmin').value=min??'';recompute();$$('#exchips button').forEach(b=>b.classList.toggle('on',b.dataset.ex===sel.id));if((sel.id==='gym'||sel.id==='hiit')&&!setlist.children.length)addRow();if(min==null){$('#exmin').focus();$('#exstatus').textContent='How many minutes?'}};
   const parse=()=>{const txt=$('#exdesc').value.trim();if(!txt)return;const r=parseActivity(txt,w);if(!r){$('#exstatus').textContent='Didn’t recognise that. Tap a preset below and set the minutes.';return}$('#exstatus').textContent=r.needMinutes?'':`${r.name}: ${r.min} min${r.assumed?' (your usual, change if needed)':''} · ${fmt(r.kcal)} kcal`;show(r.name,r.min,r.met,r.act.id)};
   $('#exparse').onclick=parse;$('#exdesc').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();parse()}};
-  const mic=$('#exmic');if(mic)mic.onclick=()=>startMic(mic,t=>{$('#exdesc').value=t;parse()},t=>{$('#exdesc').value=t});
+  const mic=$('#exmic');if(mic)mic.onclick=()=>startMic(mic,t=>{$('#exdesc').value=t;parse()},t=>{$('#exdesc').value=t},$('#exdesc'));
   $$('#exchips button').forEach(b=>b.onclick=()=>{const e=EX.find(x=>x.id===b.dataset.ex);const def=e.id==='sauna'?20:(e.id==='gym'||e.id==='hiit')?(S.profile.gymMinutes||45):e.id.startsWith('fb')?S.profile.fbMinutes:30;$('#exdesc').value=e.name;show(e.name,def,e.met,e.id)});
   $('#exmin').oninput=recompute;$('#exband').oninput=recompute;$('#exname').oninput=recompute;
   $('#excancel').onclick=closeSheet;
@@ -1140,7 +1204,7 @@ function openSpeak(meal,preset){
     <div class="xs muted">${coachMode()==='rules'?'Offline parser: I know common Dutch staples and ask one follow-up. Add your API key on the Journey tab and I understand anything you say, including photos of your plate.':'Understood by Claude: speak, type or snap a photo of your plate. I may ask one follow-up, then you confirm the portions.'}</div>
     <div class="thread" id="spthread"><div class="msg a">What did you eat? Tap the mic and talk, or type. For example: "I had a sandwich" or "300 g skyr with blueberries".</div></div>
     <div id="spitems" hidden style="display:flex;flex-direction:column;gap:6px"></div>
-    <div class="coachbar"><textarea id="spin" rows="1" enterkeyhint="send" placeholder="I had a…"></textarea><button class="btn micbtn ${micSupported()?'':'hidden'}" id="spmic" aria-label="Speak">${MIC}</button><label class="btn micbtn" id="spphotobtn" title="Photo of your plate" aria-label="Photo of your plate"><input type="file" id="spphoto" accept="image/*" capture="environment" hidden>${CAM}</label><button class="btn primary" id="spsend">Send</button></div>
+    <div class="coachbar"><textarea id="spin" rows="1" enterkeyhint="send" placeholder="I had a…"></textarea><button class="btn micbtn" id="spmic" aria-label="Speak">${MIC}</button><label class="btn micbtn" id="spphotobtn" title="Photo of your plate" aria-label="Photo of your plate"><input type="file" id="spphoto" accept="image/*" capture="environment" hidden>${CAM}</label><button class="btn primary" id="spsend">Send</button></div>
     <div class="row between">${langChips()}<span class="xs muted" id="spstatus"></span></div>`);
   bindLang($('#panel'));
   const thread=$('#spthread'),box=$('#spitems');
@@ -1169,7 +1233,7 @@ function openSpeak(meal,preset){
         list.innerHTML=prods.map((p,k)=>`<button class="res" data-pick="${k}" style="--sc:${scoreMeta(fitScore(p.per100)).color}"><div class="thumb">${p.img?`<img src="${esc(p.img)}" alt="">`:esc(p.name[0])}</div><div><div class="nm">${esc(p.name)}</div><div class="sub">${esc(p.brand||'')}${p.brand?' · ':''}${r0(p.per100.kcal)} kcal · P ${r1(p.per100.p)} /100 g</div></div><span class="score"><i></i>${fitScore(p.per100)??'–'}</span></button>`).join('');
         list.querySelectorAll('[data-pick]').forEach(pb=>pb.onclick=()=>{const p=prods[+pb.dataset.pick];it.name=p.name;it.per100={...p.per100};it.exact=true;it.barcode=p.barcode;if(it.unit&&p.serving>0){it.unit.g=r0(p.serving);it.grams=Math.round(it.count*it.unit.g)}drawItems();toast('Swapped in the exact product')})}
       catch(e){list.innerHTML='<div class="xs muted">Open Food Facts search is busy or rate-limited right now (10 searches a minute). Keep the estimate, try again in a minute, or scan the barcode.</div>'}});
-    $('#spadd').onclick=()=>{const m=meal;let n=0;for(const it of items){if(!(it.grams>0))continue;day(cur).foods.push({uid:uid(),name:it.name,brand:'',barcode:it.barcode||null,grams:r0(it.grams),meal:m,per100:{kcal:+it.per100.kcal||0,p:+it.per100.p||0,c:+it.per100.c||0,f:+it.per100.f||0,fib:it.per100.fib==null?null:+it.per100.fib,sug:it.per100.sug==null?null:+it.per100.sug}});n++}save();closeSheet();buzz();toast(`Added ${n} item${n===1?'':'s'} to ${m}`);setTimeout(checkCelebrations,500);go('today')}};
+    $('#spadd').onclick=()=>{const m=meal;let n=0;for(const it of items){if(!(it.grams>0))continue;day(cur).foods.push({uid:uid(),name:it.name,brand:'',barcode:it.barcode||null,grams:r0(it.grams),qty:(it.unit&&it.count)?qtyText(it):null,meal:m,per100:{kcal:+it.per100.kcal||0,p:+it.per100.p||0,c:+it.per100.c||0,f:+it.per100.f||0,fib:it.per100.fib==null?null:+it.per100.fib,sug:it.per100.sug==null?null:+it.per100.sug}});n++}save();closeSheet();buzz();toast(`Added ${n} item${n===1?'':'s'} to ${m}`);setTimeout(checkCelebrations,500);go('today')}};
   const send=async text=>{text=(text||'').trim();if(!text)return;push('user',text);$('#spsend').disabled=true;$('#spstatus').textContent='Working it out…';
     try{const r=await parseMeal(conv);if(Array.isArray(r.items)&&r.items.length)items=r.items.filter(x=>x&&x.name&&x.per100).map(norm);
       push('assistant',(r.reply||'')+(r.question?' '+r.question:''));drawItems();if(r.question){$('#spin').placeholder='Answer here…';$('#spin').focus()}else if(items.length){$('#spin').placeholder='Correct anything: “beets were much less”, “no mayo”, “chicken 60 g”'}}
@@ -1177,7 +1241,7 @@ function openSpeak(meal,preset){
     $('#spsend').disabled=false;$('#spstatus').textContent=''};
   $('#spsend').onclick=()=>{send($('#spin').value);$('#spin').value=''};
   $('#spin').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#spsend').click()}};
-  const mic=$('#spmic');if(mic)mic.onclick=()=>startMic(mic,t=>{$('#spin').value='';send(t)},t=>{$('#spin').value=t});
+  const mic=$('#spmic');if(mic)mic.onclick=()=>startMic(mic,t=>{$('#spin').value='';send(t)},t=>{$('#spin').value=t},$('#spin'));
   $('#spphoto').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
     if(coachMode()==='rules'){push('assistant','Photo logging runs on Claude. Add your Anthropic API key on the Journey tab (Coach & voice) and I will read your plate from a picture. Until then, say it or type it.');return}
     let dataUrl;try{dataUrl=await shrinkImage(f,1024)}catch(err){toast('Could not read that photo');return}
@@ -1381,7 +1445,7 @@ function journeyExtras(){return `
   <details class="card"><summary><h2 style="font-size:20px">Coach &amp; voice</h2></summary>
     <p class="small muted" style="margin:0 0 10px">${sampleFn?'Inside claude.ai the coach and the voice logger run on Claude automatically.':'On your phone the coach and the voice meal logger use your own Anthropic API key (console.anthropic.com → API keys). It stays in this browser and goes straight to Anthropic; a question costs well under a cent. Without it you get the offline rules.'}</p>
     <div class="row"><input type="password" id="p-key" placeholder="sk-ant-…" value="${esc(S.settings.apiKey||'')}" autocomplete="off"><button class="btn sm" id="p-keysave">Save</button>${S.settings.apiKey?'<button class="btn sm ghost" id="p-keyclear">Remove</button>':''}</div>
-    <p class="xs muted" style="margin:8px 0 0">Model: Claude Opus 5. It sees your plan, today's log, training and a cheap-protein and fibre price list before every answer. Voice uses your phone's speech recognition (Chrome).</p>
+    <p class="xs muted" style="margin:8px 0 0">Model: Claude Opus 5. It sees your plan, today's log, training and a cheap-protein and fibre price list before every answer. Voice: Chrome has built-in dictation (the mic buttons). In other browsers, or if it fails, use the mic key on your keyboard, it types into the same box.</p>
   </details>
   <details class="card"><summary><h2 style="font-size:20px">Daily reminders in Google Calendar</h2></summary>
     <p class="small muted" style="margin:0 0 10px">Each button opens Google Calendar on this phone, signed in as you, with a repeating daily reminder pre-filled. Tap Save there once.</p>
