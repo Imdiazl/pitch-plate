@@ -233,9 +233,13 @@ label.f{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--
 .pane[hidden]{display:none}
 .pane{display:flex;flex-direction:column;gap:12px}
 /* scanner */
+#torchbtn.on{background:var(--accent);color:var(--on-accent);border-color:transparent;box-shadow:0 0 0 3px var(--accent-soft)}
+#scanbox{cursor:default}
+#scanbox:has(#video:not([hidden])){cursor:crosshair}
 .scanbox{position:relative;aspect-ratio:4/3;background:#060b09;border-radius:var(--r);overflow:hidden;border:1px solid var(--line)}
 .scanbox video{width:100%;height:100%;object-fit:cover;display:block}
-.scanbox .frame{position:absolute;inset:18% 12%;border:2px solid rgba(255,255,255,.85);border-radius:14px;box-shadow:0 0 0 999px rgba(0,0,0,.4)}
+.scanbox .frame{position:absolute;inset:18% 12%;border:2px solid rgba(255,255,255,.85);border-radius:14px;box-shadow:0 0 0 999px rgba(0,0,0,.4);transition:border-color .2s,box-shadow .2s}
+.scanbox .frame.tap{border-color:var(--accent);box-shadow:0 0 0 999px rgba(0,0,0,.4),0 0 18px 2px var(--accent)}
 .scanbox .frame::after{content:"";position:absolute;left:8%;right:8%;top:50%;height:2px;background:var(--accent);box-shadow:0 0 14px var(--accent);animation:sweep 1.8s ease-in-out infinite alternate}
 @keyframes sweep{from{transform:translateY(-48px)}to{transform:translateY(48px)}}
 .scanbox .idle{position:absolute;inset:0;display:grid;place-items:center;color:#cfd8d2;text-align:center;padding:20px;font-size:14px}
@@ -428,13 +432,14 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:2px 0}
       <div class="scanbox" id="scanbox">
         <video id="video" playsinline muted autoplay hidden></video>
         <div class="frame" id="frame" hidden></div>
-        <div class="idle" id="scanidle">Point the camera at a barcode.<br>EAN-13 / EAN-8 on Dutch supermarket products.</div>
+        <div class="idle" id="scanidle">Point the camera at a barcode.<br>EAN-13 / EAN-8 on Dutch supermarket products.<br><span class="xs" style="opacity:.75">Tap the frame to refocus, use the torch in low light.</span></div>
       </div>
       <div class="row">
         <button class="btn primary" id="scanstart">Start camera</button>
         <button class="btn ghost" id="scanstop" hidden>Stop</button>
-        <span class="status" id="scanstatus"></span>
+        <button class="btn ghost" id="torchbtn" hidden aria-label="Torch"><svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg></button>
       </div>
+      <div class="status" id="scanstatus"></div>
       <div class="row">
         <input type="text" inputmode="numeric" enterkeyhint="go" id="codeinput" placeholder="Or type the barcode">
         <button class="btn" id="codego">Look up</button>

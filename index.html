@@ -249,9 +249,13 @@ label.f{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--
 .pane[hidden]{display:none}
 .pane{display:flex;flex-direction:column;gap:12px}
 /* scanner */
+#torchbtn.on{background:var(--accent);color:var(--on-accent);border-color:transparent;box-shadow:0 0 0 3px var(--accent-soft)}
+#scanbox{cursor:default}
+#scanbox:has(#video:not([hidden])){cursor:crosshair}
 .scanbox{position:relative;aspect-ratio:4/3;background:#060b09;border-radius:var(--r);overflow:hidden;border:1px solid var(--line)}
 .scanbox video{width:100%;height:100%;object-fit:cover;display:block}
-.scanbox .frame{position:absolute;inset:18% 12%;border:2px solid rgba(255,255,255,.85);border-radius:14px;box-shadow:0 0 0 999px rgba(0,0,0,.4)}
+.scanbox .frame{position:absolute;inset:18% 12%;border:2px solid rgba(255,255,255,.85);border-radius:14px;box-shadow:0 0 0 999px rgba(0,0,0,.4);transition:border-color .2s,box-shadow .2s}
+.scanbox .frame.tap{border-color:var(--accent);box-shadow:0 0 0 999px rgba(0,0,0,.4),0 0 18px 2px var(--accent)}
 .scanbox .frame::after{content:"";position:absolute;left:8%;right:8%;top:50%;height:2px;background:var(--accent);box-shadow:0 0 14px var(--accent);animation:sweep 1.8s ease-in-out infinite alternate}
 @keyframes sweep{from{transform:translateY(-48px)}to{transform:translateY(48px)}}
 .scanbox .idle{position:absolute;inset:0;display:grid;place-items:center;color:#cfd8d2;text-align:center;padding:20px;font-size:14px}
@@ -447,13 +451,14 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:2px 0}
       <div class="scanbox" id="scanbox">
         <video id="video" playsinline muted autoplay hidden></video>
         <div class="frame" id="frame" hidden></div>
-        <div class="idle" id="scanidle">Point the camera at a barcode.<br>EAN-13 / EAN-8 on Dutch supermarket products.</div>
+        <div class="idle" id="scanidle">Point the camera at a barcode.<br>EAN-13 / EAN-8 on Dutch supermarket products.<br><span class="xs" style="opacity:.75">Tap the frame to refocus, use the torch in low light.</span></div>
       </div>
       <div class="row">
         <button class="btn primary" id="scanstart">Start camera</button>
         <button class="btn ghost" id="scanstop" hidden>Stop</button>
-        <span class="status" id="scanstatus"></span>
+        <button class="btn ghost" id="torchbtn" hidden aria-label="Torch"><svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg></button>
       </div>
+      <div class="status" id="scanstatus"></div>
       <div class="row">
         <input type="text" inputmode="numeric" enterkeyhint="go" id="codeinput" placeholder="Or type the barcode">
         <button class="btn" id="codego">Look up</button>
@@ -1245,45 +1250,98 @@ function seasonCard(compact){
 }
 
 /* ---------- scanner ---------- */
-let stream=null,scanTimer=null,zx=null,scanning=false;
+let stream=null,scanTimer=null,scanRVFC=null,zxReader=null,scanning=false,scanTrack=null,torchOn=false,scanCanvas=null,scanCtx=null,scanHintTimer=null,detFails=0;
 $('#scanstart').onclick=startScan;$('#scanstop').onclick=stopScan;
+function cameraConstraints(){return {video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},advanced:[{focusMode:'continuous'}]},audio:false}}
+async function acquireStream(){
+  try{return await navigator.mediaDevices.getUserMedia(cameraConstraints())}
+  catch(e){return await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false})}
+}
+function roiRect(video){
+  const vw=video.videoWidth,vh=video.videoHeight;if(!vw||!vh)return null;
+  /* matches .frame{inset:18% 12%} in CSS, so detection only looks where the user is pointing */
+  return{x:Math.round(vw*0.12),y:Math.round(vh*0.18),w:Math.round(vw*0.76),h:Math.round(vh*0.64)};
+}
+async function applyTorch(on){
+  if(!scanTrack)return false;
+  try{await scanTrack.applyConstraints({advanced:[{torch:on}]});torchOn=on;return true}catch(e){return false}
+}
+function updateTorchBtn(){const b=$('#torchbtn');if(!b)return;let caps={};try{caps=scanTrack&&scanTrack.getCapabilities?scanTrack.getCapabilities():{}}catch(e){}b.hidden=!(caps&&'torch' in caps);b.classList.toggle('on',torchOn)}
+function tapFocus(xRatio,yRatio){
+  flashFocusRing();
+  if(!scanTrack)return;
+  try{
+    const caps=scanTrack.getCapabilities?scanTrack.getCapabilities():{};
+    if(caps&&caps.focusMode&&caps.focusMode.includes('single-shot')){
+      scanTrack.applyConstraints({advanced:[{focusMode:'single-shot',pointsOfInterest:[{x:xRatio,y:yRatio}]}]}).then(()=>{
+        setTimeout(()=>{if(scanTrack&&scanning)scanTrack.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(()=>{})},900);
+      }).catch(()=>{});
+    }
+  }catch(e){}
+}
+function flashFocusRing(){const f=$('#frame');if(!f)return;f.classList.add('tap');setTimeout(()=>f.classList.remove('tap'),450)}
 async function startScan(){
   const st=$('#scanstatus');
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){st.textContent='Camera not available here. Open the installed app over https, or type the barcode below.';return}
   try{
-    scanning=true;$('#scanstart').hidden=true;$('#scanstop').hidden=false;$('#scanidle').hidden=true;$('#video').hidden=false;$('#frame').hidden=false;
+    scanning=true;detFails=0;$('#scanstart').hidden=true;$('#scanstop').hidden=false;$('#scanidle').hidden=true;$('#video').hidden=false;$('#frame').hidden=false;
     const video=$('#video');
-    if('BarcodeDetector' in window){
-      let formats=['ean_13','ean_8','upc_a','upc_e','code_128'];
-      try{const sup=await window.BarcodeDetector.getSupportedFormats();formats=formats.filter(f=>sup.includes(f))}catch(e){}
-      if(formats.length){
-        stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
-        video.srcObject=stream;await video.play();
-        const det=new window.BarcodeDetector({formats});st.textContent='Scanning…';
-        let fails=0;scanTimer=setInterval(async()=>{if(video.readyState<2||!scanning)return;try{const codes=await det.detect(video);if(codes.length){onCode(codes[0].rawValue)}}catch(e){if(++fails>8){clearInterval(scanTimer);scanTimer=null;st.textContent='Switching scanner…';startZxing(video,st).catch(err=>{st.textContent='Scanner failed: '+(err&&err.message||err);stopScan()})}}},220);
-        return;
-      }
+    stream=await acquireStream();
+    scanTrack=stream.getVideoTracks()[0]||null;
+    if(scanTrack&&scanTrack.getCapabilities){
+      try{const caps=scanTrack.getCapabilities();if(caps.focusMode&&caps.focusMode.includes('continuous'))await scanTrack.applyConstraints({advanced:[{focusMode:'continuous'}]})}catch(e){}
     }
-    await startZxing(video,st);
-  }catch(e){st.textContent=e&&e.name==='NotAllowedError'?'Camera permission denied. Allow camera access for this site in Chrome, or type the barcode.':'Could not start the camera: '+(e&&e.message||e);stopScan()}
+    updateTorchBtn();
+    video.srcObject=stream;await video.play();
+    scanCanvas=scanCanvas||document.createElement('canvas');scanCtx=scanCanvas.getContext('2d',{willReadFrequently:true});
+    let det=null,formats=[];
+    if('BarcodeDetector' in window){
+      formats=['ean_13','ean_8','upc_a','upc_e','code_128'];
+      try{const sup=await window.BarcodeDetector.getSupportedFormats();formats=formats.filter(f=>sup.includes(f))}catch(e){}
+      if(formats.length)det=new window.BarcodeDetector({formats});
+    }
+    const loadZxing=async()=>{if(!window.ZXing){await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';s.onload=res;s.onerror=()=>rej(new Error('Scanner library could not load. Check your connection and try again.'));document.head.appendChild(s)})}return new window.ZXing.BrowserMultiFormatReader()};
+    if(!det){st.textContent='Loading scanner…';zxReader=await loadZxing()}
+    st.textContent='Scanning…';
+    clearTimeout(scanHintTimer);scanHintTimer=setTimeout(()=>{if(scanning)st.textContent='Scanning… fill the box, hold steady, add light or tap torch'},5000);
+    const tick=async()=>{
+      if(!scanning)return;
+      if(video.readyState>=2){
+        const rect=roiRect(video);
+        if(rect&&rect.w>0&&rect.h>0){
+          scanCanvas.width=rect.w;scanCanvas.height=rect.h;
+          scanCtx.drawImage(video,rect.x,rect.y,rect.w,rect.h,0,0,rect.w,rect.h);
+          try{
+            if(det){const codes=await det.detect(scanCanvas);detFails=0;if(codes.length){onCode(codes[0].rawValue);return}}
+            else if(zxReader){try{const result=zxReader.decodeFromCanvas(scanCanvas);if(result){onCode(result.getText());return}}catch(e){}}
+          }catch(e){
+            if(det){detFails++;if(detFails>12){det=null;try{zxReader=zxReader||await loadZxing()}catch(err){}}}
+          }
+        }
+      }
+      if(!scanning)return;
+      if('requestVideoFrameCallback' in video)scanRVFC=video.requestVideoFrameCallback(tick);
+      else scanTimer=setTimeout(tick,160);
+    };
+    if('requestVideoFrameCallback' in video)scanRVFC=video.requestVideoFrameCallback(tick);else tick();
+  }catch(e){st.textContent=e&&e.name==='NotAllowedError'?'Camera permission denied. Allow camera access for this site in Chrome, or type the barcode.':e&&e.name==='NotFoundError'?'No camera found on this device. Type the barcode below.':'Could not start the camera: '+(e&&e.message||e);stopScan()}
 }
-async function startZxing(video,st){
-  st.textContent='Loading scanner…';
-  if(!window.ZXing){await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';s.onload=res;s.onerror=()=>rej(new Error('Scanner library could not load. Check your connection and try again.'));document.head.appendChild(s)})}
-  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
-  zx=new window.ZXing.BrowserMultiFormatReader();st.textContent='Scanning…';
-  await zx.decodeFromConstraints({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}},video,(result)=>{if(result&&scanning)onCode(result.getText())});
-}
-function onCode(code){if(!scanning)return;stopScan();try{navigator.vibrate&&navigator.vibrate(40)}catch(e){}$('#codeinput').value=code;lookup(code)}
+function onCode(code){if(!scanning)return;stopScan();try{if(navigator.vibrate&&(!navigator.userActivation||navigator.userActivation.hasBeenActive))navigator.vibrate(40)}catch(e){}$('#codeinput').value=code;lookup(code)}
 function stopScan(){
-  scanning=false;clearInterval(scanTimer);scanTimer=null;
-  if(zx){try{zx.reset()}catch(e){}zx=null}
+  scanning=false;clearTimeout(scanHintTimer);clearTimeout(scanTimer);scanTimer=null;
+  if(scanRVFC!=null){const v=$('#video');if(v&&v.cancelVideoFrameCallback)try{v.cancelVideoFrameCallback(scanRVFC)}catch(e){}}
+  scanRVFC=null;
+  if(zxReader){try{zxReader.reset()}catch(e){}zxReader=null}
+  if(torchOn)applyTorch(false);
   if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
+  scanTrack=null;torchOn=false;
   const v=$('#video');if(v){v.srcObject=null;v.hidden=true}
   $('#frame').hidden=true;$('#scanidle').hidden=false;$('#scanstart').hidden=false;$('#scanstop').hidden=true;
+  const tb=$('#torchbtn');if(tb)tb.hidden=true;
 }
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopScan()});
-
+const torchBtnEl=$('#torchbtn');if(torchBtnEl)torchBtnEl.onclick=()=>applyTorch(!torchOn).then(updateTorchBtn);
+const scanboxEl=$('#scanbox');if(scanboxEl)scanboxEl.onclick=e=>{if(!scanning)return;const r=scanboxEl.getBoundingClientRect();const x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;tapFocus(clamp(x,0,1),clamp(y,0,1))};
 
 /* ---------- EXERCISE ---------- */
 function lastSet(name){const n=name.trim().toLowerCase();if(!n)return null;const ds=Object.keys(S.days).sort().reverse();for(const d of ds){for(const e of S.days[d].ex||[]){for(const st of e.sets||[]){if(st.n.trim().toLowerCase()===n)return{date:d,...st}}}}return null}
