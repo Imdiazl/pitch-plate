@@ -1280,6 +1280,13 @@ function tapFocus(xRatio,yRatio){
   }catch(e){}
 }
 function flashFocusRing(){const f=$('#frame');if(!f)return;f.classList.add('tap');setTimeout(()=>f.classList.remove('tap'),450)}
+function contrastStretch(ctx,w,h){
+  const img=ctx.getImageData(0,0,w,h);const d=img.data;let min=255,max=0;
+  for(let i=0;i<d.length;i+=4){const g=d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114;if(g<min)min=g;if(g>max)max=g}
+  const range=Math.max(1,max-min);
+  for(let i=0;i<d.length;i+=4){const g=d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114;const v=clamp((g-min)/range*255,0,255);d[i]=d[i+1]=d[i+2]=v}
+  ctx.putImageData(img,0,0);
+}
 async function startScan(){
   const st=$('#scanstatus');
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){st.textContent='Camera not available here. Open the installed app over https, or type the barcode below.';return}
@@ -1289,7 +1296,12 @@ async function startScan(){
     stream=await acquireStream();
     scanTrack=stream.getVideoTracks()[0]||null;
     if(scanTrack&&scanTrack.getCapabilities){
-      try{const caps=scanTrack.getCapabilities();if(caps.focusMode&&caps.focusMode.includes('continuous'))await scanTrack.applyConstraints({advanced:[{focusMode:'continuous'}]})}catch(e){}
+      try{const caps=scanTrack.getCapabilities();
+        const adv=[];
+        if(caps.focusMode&&caps.focusMode.includes('continuous'))adv.push({focusMode:'continuous'});
+        if(caps.zoom&&caps.zoom.max>caps.zoom.min){const z=Math.min(caps.zoom.max,caps.zoom.min+(caps.zoom.max-caps.zoom.min)*0.35);adv.push({zoom:z})}
+        if(adv.length)await scanTrack.applyConstraints({advanced:adv});
+      }catch(e){}
     }
     updateTorchBtn();
     video.srcObject=stream;await video.play();
@@ -1300,20 +1312,40 @@ async function startScan(){
       try{const sup=await window.BarcodeDetector.getSupportedFormats();formats=formats.filter(f=>sup.includes(f))}catch(e){}
       if(formats.length)det=new window.BarcodeDetector({formats});
     }
-    const loadZxing=async()=>{if(!window.ZXing){await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';s.onload=res;s.onerror=()=>rej(new Error('Scanner library could not load. Check your connection and try again.'));document.head.appendChild(s)})}return new window.ZXing.BrowserMultiFormatReader()};
+    const loadZxing=async()=>{
+      if(!window.ZXing){await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';s.onload=res;s.onerror=()=>rej(new Error('Scanner library could not load. Check your connection and try again.'));document.head.appendChild(s)})}
+      let hints=undefined;
+      try{const Z=window.ZXing;hints=new Map();hints.set(Z.DecodeHintType.TRY_HARDER,true);hints.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.EAN_13,Z.BarcodeFormat.EAN_8,Z.BarcodeFormat.UPC_A,Z.BarcodeFormat.UPC_E,Z.BarcodeFormat.CODE_128]);}catch(e){hints=undefined}
+      return new window.ZXing.BrowserMultiFormatReader(hints);
+    };
     if(!det){st.textContent='Loading scanner…';zxReader=await loadZxing()}
     st.textContent='Scanning…';
     clearTimeout(scanHintTimer);scanHintTimer=setTimeout(()=>{if(scanning)st.textContent='Scanning… fill the box, hold steady, add light or tap torch'},5000);
+    let tickCount=0;
+    const tryRegion=async(rx,ry,rw,rh,boost)=>{
+      scanCanvas.width=rw;scanCanvas.height=rh;
+      scanCtx.drawImage(video,rx,ry,rw,rh,0,0,rw,rh);
+      if(boost&&zxReader&&!det){try{contrastStretch(scanCtx,rw,rh)}catch(e){}}
+      if(det){const codes=await det.detect(scanCanvas);if(codes.length)return codes[0].rawValue;return null}
+      if(zxReader){try{const result=zxReader.decodeFromCanvas(scanCanvas);return result?result.getText():null}catch(e){return null}}
+      return null;
+    };
     const tick=async()=>{
       if(!scanning)return;
       if(video.readyState>=2){
         const rect=roiRect(video);
         if(rect&&rect.w>0&&rect.h>0){
-          scanCanvas.width=rect.w;scanCanvas.height=rect.h;
-          scanCtx.drawImage(video,rect.x,rect.y,rect.w,rect.h,0,0,rect.w,rect.h);
+          tickCount++;
           try{
-            if(det){const codes=await det.detect(scanCanvas);detFails=0;if(codes.length){onCode(codes[0].rawValue);return}}
-            else if(zxReader){try{const result=zxReader.decodeFromCanvas(scanCanvas);if(result){onCode(result.getText());return}}catch(e){}}
+            const hit=await tryRegion(rect.x,rect.y,rect.w,rect.h,true);
+            detFails=0;
+            if(hit){onCode(hit);return}
+            /* every 3rd frame, also try a tighter zoomed-in crop — catches small or far-away barcodes the full box misses */
+            if(tickCount%3===0){
+              const tx=Math.round(rect.x+rect.w*0.22),ty=Math.round(rect.y+rect.h*0.22),tw=Math.round(rect.w*0.56),th=Math.round(rect.h*0.56);
+              const hit2=await tryRegion(tx,ty,tw,th,true);
+              if(hit2){onCode(hit2);return}
+            }
           }catch(e){
             if(det){detFails++;if(detFails>12){det=null;try{zxReader=zxReader||await loadZxing()}catch(err){}}}
           }
