@@ -339,6 +339,7 @@ label.f{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--
 .coachbar textarea{flex:1;resize:none;min-height:46px;max-height:120px}
 /* protein picks */
 .pick{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.pendword{border:1px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:6px;background:var(--surface2)}
 .pick:first-child{border-top:0}
 .pick .nm{font-weight:600;font-size:14px}
 .pick .sub{font-size:12px;color:var(--ink2);margin-top:2px}
@@ -1655,7 +1656,7 @@ function ruleMeal(conv){
   let question=null;
   if(!askedBefore&&all.length<=2&&(composite||!all.length))question=composite?'What was on or in it? Bread type, meat or cheese, sauce, anything else?':'What exactly did you have, and roughly how much?';
   const reply=lastChanged?`Updated: ${lastChanged.join(', ')}. Anything else, or add it.`:all.length?`Got it: ${all.map(i=>`${i.name} (${qtyText(i)})`).join(', ')}. Tell me what to change (“the beets were much less”, “no mayo”, “chicken 60 g”) or add it.${uniqUnknown.length?` I don’t know “${uniqUnknown.join('”, “')}” offline, add those by scanning or on the Manual tab.`:''}`:'I couldn’t match that to anything I know offline.';
-  return{reply,question:lastChanged?null:question,items:all.map(({name,grams,per100,unit,count,_st})=>({name,grams,per100,unit,count,_st}))};
+  return{reply,question:lastChanged?null:question,items:all.map(({name,grams,per100,unit,count,_st})=>({name,grams,per100,unit,count,_st})),unknown:lastChanged?[]:uniqUnknown};
 }
 
 async function parseMeal(conv){
@@ -1672,6 +1673,7 @@ function openSpeak(meal,preset){
     <div class="xs muted">${coachMode()==='rules'?'Offline parser: I know common Dutch staples and ask one follow-up. Add your API key on the Journey tab and I understand anything you say, including photos of your plate.':'Understood by Claude: speak, type or snap a photo of your plate. I may ask one follow-up, then you confirm the portions.'}</div>
     <div class="thread" id="spthread"><div class="msg a">What did you eat? Tap the mic and talk, or type. For example: "I had a sandwich" or "300 g skyr with blueberries".</div></div>
     <div id="spitems" hidden style="display:flex;flex-direction:column;gap:6px"></div>
+    <div id="sppending" hidden style="display:flex;flex-direction:column;gap:10px"></div>
     <div class="coachbar"><textarea id="spin" rows="1" enterkeyhint="send" placeholder="I had a…"></textarea><button class="btn micbtn" id="spmic" aria-label="Speak">${MIC}</button><label class="btn micbtn" id="spphotobtn" title="Photo of your plate" aria-label="Photo of your plate"><input type="file" id="spphoto" accept="image/*" capture="environment" hidden>${CAM}</label><button class="btn primary" id="spsend">Send</button></div>
     <div class="row between">${langChips()}<span class="xs muted" id="spstatus"></span></div>`);
   bindLang($('#panel'));
@@ -1712,11 +1714,43 @@ function openSpeak(meal,preset){
     items.forEach((it,i)=>bindRow(i));
     $('#spadd').onclick=()=>{const m=meal;let n=0;for(const it of items){if(!(it.grams>0))continue;day(cur).foods.push({uid:uid(),name:it.name,brand:'',barcode:it.barcode||null,grams:r0(it.grams),qty:(it.unit&&it.count)?qtyText(it):null,meal:m,per100:{kcal:+it.per100.kcal||0,p:+it.per100.p||0,c:+it.per100.c||0,f:+it.per100.f||0,fib:it.per100.fib==null?null:+it.per100.fib,sug:it.per100.sug==null?null:+it.per100.sug}});n++}save();closeSheet();buzz();toast(`Added ${n} item${n===1?'':'s'} to ${m}`);setTimeout(checkCelebrations,500);go('today')}};
 
+  const pbox=$('#sppending');
+  const resolvedWords=new Set();
+  const confirmedPending=[]; /* OFF items a user tap-confirmed; ruleMeal's text parse knows nothing about these, so send() must re-merge them whenever it rebuilds items from conv */
+  const drawPending=entries=>{
+    if(!entries.length){pbox.hidden=true;pbox.innerHTML='';return}
+    pbox.hidden=false;
+    pbox.innerHTML=`<div class="eyebrow">Not in my offline list — tap the right match from Open Food Facts, or skip</div>`+entries.map((e,ei)=>
+      `<div class="pendword" data-pw="${ei}"><div class="small" style="font-weight:600;margin-bottom:4px">“${esc(e.word)}”</div>`+
+      e.prods.map((p,pi)=>`<button class="res" data-pp="${ei}:${pi}" style="--sc:${scoreMeta(fitScore(p.per100)).color}"><div class="thumb">${p.img?`<img src="${esc(p.img)}" alt="">`:esc((p.name||'?')[0])}</div><div><div class="nm">${esc(p.name)}</div><div class="sub">${esc(p.brand||'')}${p.brand?' · ':''}${r0(p.per100.kcal)} kcal · P ${r1(p.per100.p)} /100 g</div></div><span class="score"><i></i>${fitScore(p.per100)??'–'}</span></button>`).join('')+
+      `<button class="btn sm ghost" data-skip="${ei}" style="margin-top:2px">None of these — skip</button></div>`
+    ).join('');
+    pbox.querySelectorAll('[data-pp]').forEach(b=>b.onclick=()=>{
+      const [ei,pi]=b.dataset.pp.split(':').map(Number);const p=entries[ei].prods[pi];
+      const added=norm({name:p.name,grams:p.serving>0?r0(p.serving):100,per100:p.per100,exact:true,barcode:p.barcode||null});
+      items.push(added);confirmedPending.push(added);
+      resolvedWords.add(entries[ei].word);
+      entries.splice(ei,1);drawItems();drawPending(entries);toast(`Added ${p.name} from Open Food Facts`);buzz(8)});
+    pbox.querySelectorAll('[data-skip]').forEach(b=>b.onclick=()=>{resolvedWords.add(entries[+b.dataset.skip].word);entries.splice(+b.dataset.skip,1);drawPending(entries)});
+  };
+  const pendingWords=new Set();
+  const lookupPending=async words=>{
+    const tries=words.slice(0,2); /* cap network calls so this never feels like it's hanging */
+    tries.forEach(w=>pendingWords.add(w));
+    let settled;try{settled=await Promise.allSettled(tries.map(async w=>({word:w,prods:(await offSearch(w,6)).filter(p=>p&&p.per100&&p.per100.kcal>0).slice(0,4)})))}catch(e){settled=[]}
+    tries.forEach(w=>{pendingWords.delete(w);resolvedWords.add(w)}); /* one lookup attempt per word per sheet; a miss shouldn't keep re-querying and crowding out newer unknown words */
+    const found=settled.filter(r=>r.status==='fulfilled').map(r=>r.value).filter(x=>x.prods.length);
+    $('#spstatus').textContent=found.length?'':'Nothing found online for that either — add it by scanning or on the Manual tab.';
+    if(found.length)drawPending(found);
+  };
   const send=async text=>{text=(text||'').trim();if(!text)return;push('user',text);$('#spsend').disabled=true;$('#spstatus').textContent='Working it out…';
-    try{const r=await parseMeal(conv);if(Array.isArray(r.items)&&r.items.length)items=r.items.filter(x=>x&&x.name&&x.per100).map(norm);
-      push('assistant',(r.reply||'')+(r.question?' '+r.question:''));drawItems();if(r.question){$('#spin').placeholder='Answer here…';$('#spin').focus()}else if(items.length){$('#spin').placeholder='Correct anything: “beets were much less”, “no mayo”, “chicken 60 g”'}}
+    let lookingUp=false;
+    try{const r=await parseMeal(conv);if(Array.isArray(r.items)&&r.items.length){items=r.items.filter(x=>x&&x.name&&x.per100).map(norm);for(const ci of confirmedPending)if(!items.some(it=>it.name===ci.name))items.push(ci)}
+      push('assistant',(r.reply||'')+(r.question?' '+r.question:''));drawItems();if(r.question){$('#spin').placeholder='Answer here…';$('#spin').focus()}else if(items.length){$('#spin').placeholder='Correct anything: “beets were much less”, “no mayo”, “chicken 60 g”'}
+      const freshUnknown=(Array.isArray(r.unknown)?r.unknown:[]).filter(w=>!resolvedWords.has(w)&&!pendingWords.has(w));
+      if(coachMode()==='rules'&&freshUnknown.length){lookingUp=true;$('#spstatus').textContent=`Looking up “${freshUnknown[0]}”${freshUnknown.length>1?' online…':' online…'}`;lookupPending(freshUnknown)}}
     catch(e){push('assistant','I couldn’t process that ('+(e&&e.message||e)+'). Try again, or add it via Search.')}
-    $('#spsend').disabled=false;$('#spstatus').textContent=''};
+    $('#spsend').disabled=false;if(!lookingUp)$('#spstatus').textContent=''};
   $('#spsend').onclick=()=>{send($('#spin').value);$('#spin').value=''};
   $('#spin').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#spsend').click()}};
   const mic=$('#spmic');if(mic)mic.onclick=()=>startMic(mic,t=>{$('#spin').value='';send(t)},t=>{$('#spin').value=t},$('#spin'));
