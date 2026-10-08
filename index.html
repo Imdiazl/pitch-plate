@@ -1394,22 +1394,28 @@ async function parsePhoto(dataUrl){
 function micSupported(){return !!(window.SpeechRecognition||window.webkitSpeechRecognition)}
 function startMic(btn,onFinal,onInterim,inputEl){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){if(inputEl){inputEl.focus()}toast('No built-in voice in this browser. Use the mic key on your keyboard, it works just the same.');return null}
+  if(!SR){if(inputEl)inputEl.focus();toast('No built-in voice in this browser. Use the mic key on your keyboard, it works just the same.');return null}
   if(btn._rec){try{btn._rec.stop()}catch(e){}return null}
-  const r=new SR();r.lang=S.settings.lang||'en-GB';r.interimResults=true;r.continuous=false;r.maxAlternatives=1;let final='',lastText='',gotResult=false;
+  let r;
+  try{r=new SR()}catch(e){toast('Voice would not start here ('+((e&&e.name)||String(e))+'). Use the mic key on your keyboard instead.');return null}
+  let final='',lastText='',gotResult=false,finished=false,watchdog=null;
+  try{r.lang=S.settings.lang||'en-GB';r.interimResults=true;r.continuous=false;r.maxAlternatives=1}catch(e){}
   btn._rec=r;btn.classList.add('listening');
   const ph=inputEl?inputEl.placeholder:'';if(inputEl)inputEl.placeholder='Listening… speak now';
-  const done=()=>{btn._rec=null;btn.classList.remove('listening');if(inputEl)inputEl.placeholder=ph};
-  r.onstart=()=>{buzz(15)};
-  r.onresult=e=>{gotResult=true;let interim='';for(let i=e.resultIndex;i<e.results.length;i++){const tx=e.results[i][0].transcript;if(e.results[i].isFinal)final+=tx;else interim+=tx}lastText=(final||interim);if(onInterim)onInterim(lastText)};
-  r.onend=()=>{done();const txt=(final||lastText).trim();if(txt)onFinal(txt);else if(!gotResult)toast('Didn’t hear anything. Tap the mic, then speak straight away.')};
-  r.onerror=e=>{done();const k=e.error;
-    if(k==='not-allowed'||k==='service-not-allowed')toast('Microphone blocked. In Chrome tap the lock icon → Permissions → Microphone → Allow.');
-    else if(k==='no-speech')toast('Didn’t hear anything. Tap the mic, then speak straight away.');
-    else if(k==='network')toast('Voice needs internet (it uses Google speech). Or use the mic key on your keyboard.');
-    else if(k==='audio-capture')toast('No microphone found.');
-    else if(k!=='aborted')toast('Voice error: '+k+'. Use the mic key on your keyboard instead.')};
-  try{r.start()}catch(err){done();toast('Could not start voice. Use the mic key on your keyboard.')}
+  const done=()=>{if(finished)return;finished=true;clearTimeout(watchdog);btn._rec=null;btn.classList.remove('listening');if(inputEl)inputEl.placeholder=ph};
+  watchdog=setTimeout(()=>{if(finished)return;try{r.abort()}catch(e){}done();toast('Voice timed out with no response. Tap again, or use the mic key on your keyboard.')},10000);
+  try{
+    r.onstart=()=>{buzz(15)};
+    r.onresult=e=>{gotResult=true;let interim='';for(let i=e.resultIndex;i<e.results.length;i++){const tx=e.results[i][0].transcript;if(e.results[i].isFinal)final+=tx;else interim+=tx}lastText=(final||interim);if(onInterim)onInterim(lastText)};
+    r.onend=()=>{const txt=(final||lastText).trim();done();if(txt)onFinal(txt);else if(!gotResult)toast('Didn’t hear anything. Tap the mic, then speak straight away.')};
+    r.onerror=e=>{const k=e&&e.error;done();
+      if(k==='not-allowed'||k==='service-not-allowed')toast('Microphone blocked. In Chrome tap the lock icon → Permissions → Microphone → Allow.');
+      else if(k==='no-speech')toast('Didn’t hear anything. Tap the mic, then speak straight away.');
+      else if(k==='network')toast('Voice needs internet (it uses Google speech). Or use the mic key on your keyboard.');
+      else if(k==='audio-capture')toast('No microphone found.');
+      else if(k!=='aborted')toast('Voice error: '+(k||'unknown')+'. Use the mic key on your keyboard instead.')};
+  }catch(e){done();toast('Voice could not be set up here. Use the mic key on your keyboard instead.');return null}
+  try{r.start()}catch(err){done();toast('Could not start voice ('+((err&&err.message)||err)+'). Use the mic key on your keyboard.');return null}
   return r;
 }
 function langChips(){return `<div class="chips" style="gap:4px"><button data-lang="en-GB" class="${(S.settings.lang||'en-GB')==='en-GB'?'on':''}">EN</button><button data-lang="nl-NL" class="${S.settings.lang==='nl-NL'?'on':''}">NL</button></div>`}
