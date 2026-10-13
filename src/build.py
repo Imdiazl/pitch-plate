@@ -16,7 +16,7 @@ old=g[g.index('function weeklyChallenge'):g.index('\nconst BADGES=')]
 new="function weeklyChallenge(){const w=weekOf(ymd(new Date()));const lw=weekOf(addDays(w[0],-7));const hadLast=lw.some(d=>S.days[d]&&S.days[d].foods.length);const wk=Math.floor((parseYmd(w[0])-new Date(2026,0,5))/(7*864e5));let c;if(hadLast){c=[...CHALLENGES].map((x,i)=>({x,r:x.count(lw)/x.goal,i})).sort((a,b)=>a.r-b.r||((a.i+wk)%5)-((b.i+wk)%5))[0].x}else c=CHALLENGES[((wk%CHALLENGES.length)+CHALLENGES.length)%CHALLENGES.length];const n=c.count(w);return{...c,n:Math.min(n,c.goal),done:n>=c.goal,personal:hadLast}}"
 g=g.replace(old,new)
 ds0=g.index('function dayScore(d){'); ds1=g.index('\n}',ds0)+2
-g=g[:ds0]+"function dayScore(d){const D=S.days[d];if(!D||!D.foods.length)return null;return clamp(scoreParts(d).reduce((a,x)=>a+x.earned,0),0,100)}\n"+g[ds1:]
+g=g[:ds0]+"function dayScore(d){const D=S.days[d];if(!D||!D.foods.some(f=>!f.unresolved))return null;return clamp(scoreParts(d).reduce((a,x)=>a+x.earned,0),0,100)}\n"+g[ds1:]
 keep['game']=g
 for k,v in keep.items(): t=t.replace('{{'+k+'}}',v)
 assert not re.search(r'\{\{(staples|maths|search|gcal|coach|game|scanner|exercise)\}\}',t)
