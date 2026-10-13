@@ -1561,5 +1561,7 @@ function renderPlan(){if(!S.profile){if(!wiz.open)wiz={open:true,step:0,d:{...DE
 
 /* ---------- boot ---------- */
 applyTheme();render();setTimeout(checkCelebrations,800);importFromLink();window.addEventListener('hashchange',importFromLink);
+/* headless hook: the Telegram bot runs this same script in Node and reaches the engine through it; a no-op in the browser */
+if(typeof globalThis.__ppExport==='function')globalThis.__ppExport({ruleMeal,parseSegment,applyAdjustment,qtyText,enName,dutchName,findFoods,targetsFor,totals,kcalRange,fitScore,scoreMeta,verdictFor,ruleCoach,coachContext,scoreHint,scoreParts,dayScore,earnedBadges,weeklyChallenge,latestWeightEntry,plan,mapOFF,offSearch,ymd,addDays,niceDate,normalize,save,load,day,uid,guessMeal,parseActivity,parseMeal,parsePhoto,askClaudeAPI,coachMode,proteinPriceContext,claudeVerdict,checkCelebrations,render,STAPLES,MEALS,MEAL_SYSTEM,COACH_SYSTEM,KEY,getS:()=>S,getCur:()=>cur,setCur:v=>{cur=v}});
 })();
 </script>
